@@ -3,10 +3,11 @@
 
 # mdcat
 
-Fancy `cat` for Markdown (that is, [CommonMark][]):
+Fancy `cat` for Markdown (that is, [CommonMark][]) and AsciiDoc:
 
 ```
 $ mdcat sample.md
+$ mdcat sample.adoc
 ```
 
 ![mdcat showcase with different colour themes][sxs]
@@ -27,6 +28,7 @@ mdcat in [WezTerm], with "One Light (base16)", "Gruvbox Light", and "Darcula
 Then it
 
 * nicely renders all basic CommonMark syntax,
+* renders AsciiDoc documents (`.adoc`, `.asciidoc`) with equivalent formatting support,
 * highlights code blocks with [syntect],
 * shows [links][osc8], and also images inline in supported terminals (see above, where "Rust" is a clickable link!),
 * adds jump marks for headings in [iTerm2] (jump forwards and backwards with <key>⇧⌘↓</key> and <key>⇧⌘↑</key>).
@@ -51,6 +53,7 @@ Not supported:
 
 * CommonMark extension for footnotes.
 * Inline markup and text wrapping in table cells.
+* AsciiDoc tables, include directives, and conditional preprocessing.
 
 [syntect]: https://github.com/trishume/syntect
 [osc8]: https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda

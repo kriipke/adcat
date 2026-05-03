@@ -36,6 +36,8 @@ pub mod args;
 pub mod output;
 /// Resource handling for mdca.
 pub mod resources;
+/// AsciiDoc rendering support.
+pub mod asciidoc;
 
 /// Default read size limit for resources.
 pub static DEFAULT_RESOURCE_READ_LIMIT: u64 = 104_857_600;
@@ -79,14 +81,25 @@ pub fn process_file(
         "Read input, using {} as base directory",
         base_dir.display()
     );
-    let parser = Parser::new_ext(
-        &input,
-        Options::ENABLE_TASKLISTS | Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TABLES,
-    );
-    let env = Environment::for_local_directory(&base_dir)?;
 
+    let is_asciidoc = filename.ends_with(".adoc") || filename.ends_with(".asciidoc");
+    let env = Environment::for_local_directory(&base_dir)?;
     let mut sink = BufWriter::new(output.writer());
-    pulldown_cmark_mdcat::push_tty(settings, &env, resource_handler, &mut sink, parser)
+
+    if is_asciidoc {
+        event!(Level::DEBUG, "Processing AsciiDoc file: {}", filename);
+        let parse_result = acdc_parser::parse(&input, &acdc_parser::Options::default())
+            .with_context(|| format!("Failed to parse AsciiDoc file: {}", filename))?;
+        let events = asciidoc::document_to_events(parse_result.document());
+        pulldown_cmark_mdcat::push_tty(settings, &env, resource_handler, &mut sink, events.into_iter())
+    } else {
+        event!(Level::DEBUG, "Processing Markdown file: {}", filename);
+        let parser = Parser::new_ext(
+            &input,
+            Options::ENABLE_TASKLISTS | Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TABLES,
+        );
+        pulldown_cmark_mdcat::push_tty(settings, &env, resource_handler, &mut sink, parser)
+    }
         .and_then(|_| {
             event!(Level::TRACE, "Finished rendering, flushing output");
             sink.flush()
