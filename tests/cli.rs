@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-//! Test the command line interface of mdcat
+//! Test the command line interface of xcat
 
 #![deny(warnings, clippy::all)]
 
@@ -13,21 +13,21 @@ mod cli {
     use std::io::{Read, Write};
     use std::process::{Command, Output, Stdio};
 
-    fn cargo_mdcat() -> Command {
-        Command::new(env!("CARGO_BIN_EXE_mdcat"))
+    fn cargo_xcat() -> Command {
+        Command::new(env!("CARGO_BIN_EXE_xcat"))
     }
 
-    fn run_cargo_mdcat<I, S>(args: I) -> Output
+    fn run_cargo_xcat<I, S>(args: I) -> Output
     where
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
-        cargo_mdcat().args(args).output().unwrap()
+        cargo_xcat().args(args).output().unwrap()
     }
 
     #[test]
     fn show_help() {
-        let output = run_cargo_mdcat(["--help"]);
+        let output = run_cargo_xcat(["--help"]);
         let stdout = std::str::from_utf8(&output.stdout).unwrap();
         assert!(
             output.status.success(),
@@ -35,12 +35,12 @@ mod cli {
             output.status,
         );
         assert!(output.stderr.is_empty());
-        assert!(stdout.contains("See 'man 1 mdcat' for more information."));
+        assert!(stdout.contains("See 'man 1 xcat' for more information."));
     }
 
     #[test]
     fn long_version_includes_license() {
-        let output = run_cargo_mdcat(["--version"]);
+        let output = run_cargo_xcat(["--version"]);
         let stdout = std::str::from_utf8(&output.stdout).unwrap();
         assert!(
             output.status.success(),
@@ -55,7 +55,7 @@ mod cli {
 
     #[test]
     fn file_list_fail_late() {
-        let output = run_cargo_mdcat(["does-not-exist", "sample/common-mark.md"]);
+        let output = run_cargo_xcat(["does-not-exist", "sample/common-mark.md"]);
         let stderr = std::str::from_utf8(&output.stderr).unwrap();
         let stdout = std::str::from_utf8(&output.stdout).unwrap();
         assert!(!output.status.success());
@@ -69,7 +69,7 @@ mod cli {
 
     #[test]
     fn file_list_fail_fast() {
-        let output = run_cargo_mdcat(["--fail", "does-not-exist", "sample/common-mark.md"]);
+        let output = run_cargo_xcat(["--fail", "does-not-exist", "sample/common-mark.md"]);
         let stderr = std::str::from_utf8(&output.stderr).unwrap();
         assert!(!output.status.success());
         // We failed to read the first file and exited early, so nothing was printed at all
@@ -82,7 +82,7 @@ mod cli {
 
     #[test]
     fn ignore_broken_pipe() {
-        let mut child = cargo_mdcat()
+        let mut child = cargo_xcat()
             .stdin(Stdio::piped())
             // .arg("sample/common-mark.md")
             .stdout(Stdio::piped())

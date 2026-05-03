@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - mdcat-*
+      - xcat-*
 
 jobs:
   build-manpage:
@@ -12,11 +12,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: docker://asciidoctor/docker-asciidoctor
         with:
-          args: asciidoctor -b manpage -a reproducible mdcat.1.adoc
+          args: asciidoctor -b manpage -a reproducible xcat.1.adoc
       - uses: actions/upload-artifact@v4
         with:
-          name: mdcat.1
-          path: mdcat.1
+          name: xcat.1
+          path: xcat.1
 
   build-binaries:
     runs-on: "${{ matrix.os }}"
@@ -41,9 +41,9 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: ./artifacts
-      - run: mv artifacts/mdcat.1 .
+      - run: mv artifacts/xcat.1 .
       - run: cargo build --locked --target '${{ matrix.target }}' --release
-      - run: strip 'target/${{ matrix.target }}/release/mdcat'
+      - run: strip 'target/${{ matrix.target }}/release/xcat'
         if: ${{ !contains(matrix.target, 'windows') }}
       - id: version
         shell: bash
@@ -87,7 +87,7 @@ jobs:
           cat CHANGELOG-release.md
       - uses: softprops/action-gh-release@v2
         with:
-          name: mdcat-${{ steps.version.outputs.version }}
+          name: xcat-${{ steps.version.outputs.version }}
           body_path: ./CHANGELOG-release.md
           files: "./assets/*"
         env:

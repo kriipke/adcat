@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-//! Command line application to render markdown to TTYs.
+//! Command line application to render markdown and asciidoc to TTYs.
 //!
 //! Note that as of version 2.0.0 mdcat itself no longer contains the core rendering functions.
 //! Use [`pulldown_cmark_mdcat`] instead.
@@ -29,12 +29,12 @@ use tracing::{event, instrument, Level};
 use args::ResourceAccess;
 use output::Output;
 
-/// Argument parsing for mdcat.
+/// Argument parsing for xcat.
 #[allow(missing_docs)]
 pub mod args;
-/// Output handling for mdcat.
+/// Output handling for xcat.
 pub mod output;
-/// Resource handling for mdca.
+/// Resource handling for xcat.
 pub mod resources;
 /// AsciiDoc rendering support.
 pub mod asciidoc;
@@ -116,7 +116,7 @@ pub fn process_file(
     Ok(())
 }
 
-/// Create the resource handler for mdcat.
+/// Create the resource handler for xcat.
 pub fn create_resource_handler(access: ResourceAccess) -> Result<DispatchingResourceHandler> {
     let mut resource_handlers: Vec<Box<dyn ResourceUrlHandler>> = vec![Box::new(
         FileResourceHandler::new(DEFAULT_RESOURCE_READ_LIMIT),
@@ -124,7 +124,7 @@ pub fn create_resource_handler(access: ResourceAccess) -> Result<DispatchingReso
     if let ResourceAccess::Remote = access {
         let user_agent = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
         event!(
-            target: "mdcat::main",
+            target: "xcat::main",
             Level::DEBUG,
             "Remote resource access permitted, creating HTTP client with user agent {}",
             user_agent

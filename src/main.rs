@@ -11,7 +11,7 @@
 
 use clap::{CommandFactory, Parser};
 use clap_complete::generate;
-use mdcat::{create_resource_handler, process_file};
+use xcat::{create_resource_handler, process_file};
 use pulldown_cmark_mdcat::terminal::{TerminalProgram, TerminalSize};
 use pulldown_cmark_mdcat::{Settings, Theme};
 use syntect::parsing::SyntaxSet;
@@ -19,8 +19,8 @@ use tracing::{event, Level};
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::EnvFilter;
 
-use mdcat::args::Args;
-use mdcat::output::Output;
+use xcat::args::Args;
+use xcat::output::Output;
 
 fn main() {
     // Initialize curl for remote resources
@@ -31,7 +31,7 @@ fn main() {
         // Disable all logging by default, to avoid interfering with regular output at all cost.
         // tracing is a debugging tool here so we expect it to be enabled explicitly.
         .with_default_directive(LevelFilter::OFF.into())
-        .with_env_var("MDCAT_LOG")
+        .with_env_var("XCAT_LOG")
         .from_env_lossy();
     tracing_subscriber::fmt::Subscriber::builder()
         .pretty()
@@ -40,12 +40,12 @@ fn main() {
         .init();
 
     let args = Args::parse().command;
-    event!(target: "mdcat::main", Level::TRACE, ?args, "mdcat arguments");
+    event!(target: "xcat::main", Level::TRACE, ?args, "xcat arguments");
 
     if let Some(shell) = args.completions {
         let binary = match args {
-            mdcat::args::Command::Mdcat { .. } => "mdcat",
-            mdcat::args::Command::Mdless { .. } => "mdless",
+            xcat::args::Command::Xcat { .. } => "xcat",
+            xcat::args::Command::Xless { .. } => "xless",
         };
         let mut command = Args::command();
         let subcommand = command.find_subcommand_mut(binary).unwrap();
@@ -85,7 +85,7 @@ fn main() {
                     theme: Theme::default(),
                 };
                 event!(
-                    target: "mdcat::main",
+                    target: "xcat::main",
                     Level::TRACE,
                     ?settings.terminal_size,
                     ?settings.terminal_capabilities,
@@ -114,7 +114,7 @@ fn main() {
                 128
             }
         };
-        event!(target: "mdcat::main", Level::TRACE, "Exiting with final exit code {}", exit_code);
+        event!(target: "xcat::main", Level::TRACE, "Exiting with final exit code {}", exit_code);
         std::process::exit(exit_code);
     }
 }

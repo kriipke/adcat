@@ -8,12 +8,12 @@ use clap::ValueHint;
 use clap_complete::Shell;
 
 fn after_help() -> &'static str {
-    "See 'man 1 mdcat' for more information.
+    "See 'man 1 xcat' for more information.
 
-mdcat can be installed as or linked to mdless,
+xcat can be installed as or linked to xless,
 for automatic pagination.
 
-Report issues to <https://github.com/swsnr/mdcat>."
+xcat is a fork of mdcat: <https://github.com/swsnr/mdcat>"
 }
 
 fn long_version() -> &'static str {
@@ -38,10 +38,10 @@ pub struct Args {
 #[derive(Debug, clap::Subcommand)]
 pub enum Command {
     #[command(version, about, after_help = after_help(), long_version = long_version())]
-    Mdcat {
+    Xcat {
         #[command(flatten)]
         args: CommonArgs,
-        /// Paginate the output of mdcat with a pager like less (default for mdless).
+        /// Paginate the output of xcat with a pager like less (default for xless).
         #[arg(short, long, overrides_with = "no_pager")]
         paginate: bool,
         /// Do not paginate output (default). Overrides an earlier --paginate.
@@ -49,13 +49,13 @@ pub enum Command {
         no_pager: bool,
     },
     #[command(version, about, after_help = after_help(), long_version = long_version())]
-    Mdless {
+    Xless {
         #[command(flatten)]
         args: CommonArgs,
-        /// Do not paginate output (default for mdcat).
+        /// Do not paginate output (default for xcat).
         #[arg(short = 'P', long, overrides_with = "paginate")]
         no_pager: bool,
-        /// Paginate the output of mdcat with a pager like less (default). Overrides an earlier --no-pager.
+        /// Paginate the output of xcat with a pager like less (default). Overrides an earlier --no-pager.
         #[arg(short, long)]
         paginate: bool,
     },
@@ -66,8 +66,8 @@ impl Command {
         match *self {
             // In both cases look at the option indicating the non-default
             // behaviour; the overrides above are configured accordingly.
-            Command::Mdcat { paginate, .. } => paginate,
-            Command::Mdless { no_pager, .. } => !no_pager,
+            Command::Xcat { paginate, .. } => paginate,
+            Command::Xless { no_pager, .. } => !no_pager,
         }
     }
 }
@@ -77,8 +77,8 @@ impl std::ops::Deref for Command {
 
     fn deref(&self) -> &Self::Target {
         match self {
-            Command::Mdcat { args, .. } => args,
-            Command::Mdless { args, .. } => args,
+            Command::Xcat { args, .. } => args,
+            Command::Xless { args, .. } => args,
         }
     }
 }
@@ -112,7 +112,7 @@ pub struct CommonArgs {
     pub completions: Option<Shell>,
 }
 
-/// What resources mdcat may access.
+/// What resources xcat may access.
 #[derive(Debug, Copy, Clone)]
 pub enum ResourceAccess {
     /// Only allow local resources.

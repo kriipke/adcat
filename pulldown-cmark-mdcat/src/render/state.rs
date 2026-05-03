@@ -278,7 +278,7 @@ impl StateStack {
             panic!(
                 "More than {MAX_STATES} levels of nesting reached.
 
-Report an issue to https://github.com/swsnr/mdcat/issues
+Report an issue to https://github.com/kriipke/xcat/issues
 including the document causing this panic.",
             )
         }

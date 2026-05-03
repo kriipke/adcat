@@ -16,7 +16,7 @@ It supports:
 
 It does not support commonmark footnote extension syntax.
 
-[mdcat]: https://github.com/swsnr/mdcat
+[mdcat]: https://github.com/kriipke/xcat
 [pulldown-cmark]: https://github.com/raphlinus/pulldown-cmark
 
 ## License

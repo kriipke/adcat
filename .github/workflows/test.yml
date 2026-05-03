@@ -64,12 +64,12 @@ jobs:
       # Manpage
       - uses: docker://asciidoctor/docker-asciidoctor
         with:
-          args: asciidoctor -b manpage -a reproducible --warnings mdcat.1.adoc
-      - run: man -l --warnings=w --pager=cat mdcat.1
+          args: asciidoctor -b manpage -a reproducible --warnings xcat.1.adoc
+      - run: man -l --warnings=w --pager=cat xcat.1
         env:
           MANWIDTH: 80
 
-  # Test mdcat itself
+  # Test xcat itself
   test:
     runs-on: ${{ matrix.os }}
     strategy:

@@ -10,7 +10,7 @@ use std::process::*;
 use anyhow::{bail, Context, Result};
 use tracing::{event, Level};
 
-/// The output for mdcat
+/// The output for xcat
 pub enum Output {
     /// Standard output
     Stdout(std::io::Stdout),
@@ -41,7 +41,7 @@ fn parse_env_var(name: &str) -> Result<Option<Vec<String>>> {
 }
 
 fn pager_from_env() -> Result<Vec<String>> {
-    for envvar in ["MDCAT_PAGER", "PAGER"] {
+    for envvar in ["XCAT_PAGER", "PAGER"] {
         event!(Level::TRACE, envvar, "looking for pager in environment");
         match parse_env_var(envvar) {
             // Continue looking

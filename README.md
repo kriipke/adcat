@@ -1,18 +1,18 @@
 > [!IMPORTANT]
-> No longer maintained.  If you wish to take over, send a mail to <sebastian@swsnr.de>.
+> This is a fork of [mdcat](https://github.com/swsnr/mdcat). The upstream project is no longer maintained.
 
-# mdcat
+# xcat
 
 Fancy `cat` for Markdown (that is, [CommonMark][]) and AsciiDoc:
 
 ```
-$ mdcat sample.md
-$ mdcat sample.adoc
+$ xcat sample.md
+$ xcat sample.adoc
 ```
 
-![mdcat showcase with different colour themes][sxs]
+![xcat showcase with different colour themes][sxs]
 
-mdcat in [WezTerm], with "One Light (base16)", "Gruvbox Light", and "Darcula
+xcat in [WezTerm], with "One Light (base16)", "Gruvbox Light", and "Darcula
 (base16)" (from left to right), and [JetBrains Mono] as font.
 
 [CommonMark]: http://commonmark.org
@@ -24,7 +24,7 @@ mdcat in [WezTerm], with "One Light (base16)", "Gruvbox Light", and "Darcula
 
 ## Features
 
-`mdcat` works best with [iTerm2], [WezTerm], and [kitty], and a good terminal font with italic characters.
+`xcat` works best with [iTerm2], [WezTerm], and [kitty], and a good terminal font with italic characters.
 Then it
 
 * nicely renders all basic CommonMark syntax,
@@ -44,9 +44,9 @@ Then it
 | [VSCode]                   | ✓             | ✓                   | ✓²     |            |
 | [Ghostty]                  | ✓             | ✓                   | ✓²     |            |
 
-1) mdcat requires that the terminal supports strikethrough formatting and [inline links][osc8].
+1) xcat requires that the terminal supports strikethrough formatting and [inline links][osc8].
     This includes most modern terminal emulators, such as Windows Terminal, KDE Konsole, or anything based on VTE, GNOME's terminal emulation library.
-    But mdcat likely won't work well on old terminals that lack these features (e.g. the Linux text console).
+    But xcat likely won't work well on old terminals that lack these features (e.g. the Linux text console).
 2) SVG images are rendered with [resvg], see [SVG support].
 
 Not supported:
@@ -68,16 +68,16 @@ Not supported:
 
 ## Usage
 
-Try `mdcat --help` or read the [mdcat(1)](./mdcat.1.adoc) manpage.
+Try `xcat --help` or read the [xcat(1)](./xcat.1.adoc) manpage.
 
 ## Installation
 
-* [Release binaries](https://github.com/swsnr/mdcat/releases/) built on Github Actions.
-  - These binaries are build from Git source on Github actions; you find provenance attestations at <https://github.com/swsnr/mdcat/attestations>.
+* [Release binaries](https://github.com/kriipke/xcat/releases/) built on Github Actions.
+  - These binaries are build from Git source on Github actions; you find provenance attestations at <https://github.com/kriipke/xcat/attestations>.
 * 3rd party packages at [Repology](https://repology.org/project/mdcat/versions)
-* You can also build `mdcat` manually with `cargo install mdcat` (see below for details).
+* You can also build `xcat` manually with `cargo install --path .` (see below for details).
 
-`mdcat` can be linked or copied to `mdless`; if invoked as `mdless` it automatically uses pagination.
+`xcat` can be linked or copied to `xless`; if invoked as `xless` it automatically uses pagination.
 
 ## Building
 
@@ -87,36 +87,36 @@ Building requires `libcurl`.
 
 ## Packaging
 
-When packaging `mdcat` you may wish to include the following additional artifacts:
+When packaging `xcat` you may wish to include the following additional artifacts:
 
-- A symlink or hardlink from `mdless` to `mdcat` (see above).
-- Shell completions for relevant shells, by invoking `mdcat --completions` after building, e.g.
+- A symlink or hardlink from `xless` to `xcat` (see above).
+- Shell completions for relevant shells, by invoking `xcat --completions` after building, e.g.
 
   ```console
-  $ mdcat --completions fish > /usr/share/fish/vendor_completions.d/mdcat.fish
-  $ mdcat --completions bash > /usr/share/bash-completion/completions/mdcat
-  $ mdcat --completions zsh > /usr/share/zsh/site-functions/_mdcat
-  # Same for mdless if you include it
-  $ mdless --completions fish > /usr/share/fish/vendor_completions.d/mdless.fish
-  $ mdless --completions bash > /usr/share/bash-completion/completions/mdless
-  $ mdless --completions zsh > /usr/share/zsh/site-functions/_mdless
+  $ xcat --completions fish > /usr/share/fish/vendor_completions.d/xcat.fish
+  $ xcat --completions bash > /usr/share/bash-completion/completions/xcat
+  $ xcat --completions zsh > /usr/share/zsh/site-functions/_xcat
+  # Same for xless if you include it
+  $ xless --completions fish > /usr/share/fish/vendor_completions.d/xless.fish
+  $ xless --completions bash > /usr/share/bash-completion/completions/xless
+  $ xless --completions zsh > /usr/share/zsh/site-functions/_xless
   ```
 
-- A build of the man page `mdcat.1.adoc`, using [AsciiDoctor]:
+- A build of the man page `xcat.1.adoc`, using [AsciiDoctor]:
 
   ```console
-  $ asciidoctor -b manpage -a reproducible -o /usr/share/man/man1/mdcat.1 mdcat.1.adoc
-  $ gzip /usr/share/man/man1/mdcat.1
-  # If you include a mdless as above, you may also want to support man mdless
-  $ ln -s mdcat.1.gz /usr/share/man/man1/mdless.1.gz
+  $ asciidoctor -b manpage -a reproducible -o /usr/share/man/man1/xcat.1 xcat.1.adoc
+  $ gzip /usr/share/man/man1/xcat.1
+  # If you include a xless as above, you may also want to support man xless
+  $ ln -s xcat.1.gz /usr/share/man/man1/xless.1.gz
   ```
 
 [AsciiDoctor]: https://asciidoctor.org/
 
 ## Troubleshooting
 
-`mdcat` can output extensive tracing information when asked to.
-Run `mdcat` with `$MDCAT_LOG=trace` for complete tracing information, or with `$MDCAT_LOG=mdcat::render=trace` to trace only rendering.
+`xcat` can output extensive tracing information when asked to.
+Run `xcat` with `$XCAT_LOG=trace` for complete tracing information, or with `$XCAT_LOG=xcat::render=trace` to trace only rendering.
 
 ## License
 

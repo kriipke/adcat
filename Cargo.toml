@@ -1,9 +1,9 @@
 [package]
-name = "mdcat"
-description = "cat for markdown: Show markdown documents in terminals"
+name = "xcat"
+description = "cat for markdown and asciidoc: Show documents in terminals (fork of mdcat)"
 readme = "README.md"
-documentation = "https://docs.rs/mdcat"
-keywords = ["markdown", "less", "cat"]
+documentation = "https://docs.rs/xcat"
+keywords = ["markdown", "asciidoc", "less", "cat"]
 homepage.workspace = true
 repository.workspace = true
 version.workspace = true
@@ -38,20 +38,20 @@ anstyle-query = { version = "1.1.0", default-features = false }
 release = true
 pre-release-replacements = [
     # Update version and release date in manpage
-    { file="mdcat.1.adoc", search="(?m)^:revnumber:.*$", replace = ":revnumber: {{version}}" },
-    { file="mdcat.1.adoc", search="(?m)^:revdate:.*$", replace = ":revdate: {{date}}" },
+    { file="xcat.1.adoc", search="(?m)^:revnumber:.*$", replace = ":revnumber: {{version}}" },
+    { file="xcat.1.adoc", search="(?m)^:revdate:.*$", replace = ":revdate: {{date}}" },
     # Update the changelog
     { file="CHANGELOG.md", search="## \\[Unreleased\\]", replace = "## [Unreleased]\n\n## [{{version}}] – {{date}}", exactly = 1 },
     { file="CHANGELOG.md", search="HEAD", replace = "{{tag_name}}", exactly = 1 },
-    { file="CHANGELOG.md", search="\\[Unreleased\\]: ", replace = "[Unreleased]: https://github.com/swsnr/mdcat/compare/{{tag_name}}...HEAD\n[{{version}}]: ", exactly = 1 },
+    { file="CHANGELOG.md", search="\\[Unreleased\\]: ", replace = "[Unreleased]: https://github.com/kriipke/xcat/compare/{{tag_name}}...HEAD\n[{{version}}]: ", exactly = 1 },
 ]
 
 [workspace]
 members = ["pulldown-cmark-mdcat"]
 
 [workspace.package]
-homepage = "https://github.com/swsnr/mdcat"
-repository = "https://github.com/swsnr/mdcat"
+homepage = "https://github.com/kriipke/xcat"
+repository = "https://github.com/kriipke/xcat"
 version = "2.7.1"
 categories = ["command-line-utilities", "text-processing"]
 license = "MPL-2.0 AND Apache-2.0"
@@ -75,9 +75,9 @@ pulldown-cmark-mdcat = { version = "=2.7.1", path = "pulldown-cmark-mdcat", defa
 [workspace.metadata.release]
 allow-branch = ["main"]
 pre-release-commit-message = "Release {{version}}"
-tag-prefix = "mdcat-"
+tag-prefix = "xcat-"
 tag-name = "{{prefix}}{{version}}"
-tag-message = "mdcat {{version}}"
+tag-message = "xcat {{version}}"
 sign-tag = true
 # Github CI does this for us.
 verify = false
