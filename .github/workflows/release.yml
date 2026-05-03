@@ -97,11 +97,15 @@ jobs:
         with:
           tool: cross
 
+      - name: Set up Go
+        if: matrix.deb_arch != ''
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
       - name: Install nfpm
         if: matrix.deb_arch != ''
-        uses: taiki-e/install-action@v2
-        with:
-          tool: nfpm
+        run: go install github.com/goreleaser/nfpm/v2/cmd/nfpm@latest
 
       - name: Install system dependencies
         if: runner.os == 'Linux' && !matrix.use_cross
