@@ -19,6 +19,10 @@ release = false
 publish = false
 changelog_update = false
 
+[[package]]
+name = "xcat"
+publish = false
+
 [changelog]
 header = """# Changelog
 
