@@ -10,8 +10,6 @@ changelog_update = true
 git_release_enable = false
 # Create signed git tags
 git_tag_enable = true
-# Push the version bump commit and tag
-git_push_enable = true
 # Skip semver API check (binary crate, no public API)
 semver_check = false
 
