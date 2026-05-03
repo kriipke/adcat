@@ -1,0 +1,44 @@
+# release-plz configuration
+# Docs: https://release-plz.ieni.dev/docs/config
+
+[workspace]
+# Don't auto-update dependencies (dependabot handles this)
+dependencies_update = false
+# Generate changelog from conventional commits
+changelog_update = true
+# We handle GitHub releases ourselves to attach build artifacts
+git_release_enable = false
+# Create signed git tags
+git_tag_enable = true
+# Push the version bump commit and tag
+git_push_enable = true
+# Skip semver API check (binary crate, no public API)
+semver_check = false
+# Only release from main
+allow_branch = ["main"]
+
+# GPG signing
+sign-commit = true
+sign-tag = true
+
+[changelog]
+header = """# Changelog
+
+All notable changes to this project will be documented in this file.
+
+"""
+trim = true
+body = """
+{% if version %}\
+    ## [{{ version }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else %}\
+    ## [Unreleased]
+{% endif %}\
+{% for group, commits in commits | group_by(attribute="group") %}
+    ### {{ group }}
+    {% for commit in commits %}
+        - {{ commit.message | upper_first }}{% if commit.breaking %} (**BREAKING**){% endif %}
+    {% endfor %}
+{% endfor %}
+
+"""

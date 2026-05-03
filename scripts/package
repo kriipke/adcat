@@ -39,8 +39,10 @@ package_unix() {
         "xcat.1" \
         "${pkg_dir}/${ARCHIVE_NAME}"
     tar -czf "${PWD}/${archive_file}" -C "${pkg_dir}" "${ARCHIVE_NAME}"
-    echo "file=${archive_file}" >>"${GITHUB_OUTPUT}"
-    echo "name=${ARCHIVE_NAME}.tar.gz" >>"${GITHUB_OUTPUT}"
+    if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+        echo "file=${archive_file}" >>"${GITHUB_OUTPUT}"
+        echo "name=${ARCHIVE_NAME}.tar.gz" >>"${GITHUB_OUTPUT}"
+    fi
 }
 
 if [[ "${TARGET}" == *windows* ]]; then

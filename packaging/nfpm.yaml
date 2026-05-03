@@ -1,0 +1,29 @@
+name: xcat
+version: ${VERSION}
+section: utils
+priority: optional
+maintainer: kriipke <kriipke@users.noreply.github.com>
+description: cat for markdown and asciidoc: Show documents in terminals
+homepage: https://github.com/kriipke/xcat
+license: MPL-2.0
+contents:
+  - src: ./target/${TARGET}/release/xcat
+    dst: /usr/bin/xcat
+  - src: ./xcat.1
+    dst: /usr/share/man/man1/xcat.1
+  - src: ./README.md
+    dst: /usr/share/doc/xcat/README.md
+  - src: ./LICENSE
+    dst: /usr/share/doc/xcat/LICENSE
+
+overrides:
+  deb:
+    arch: ${DEB_ARCH}
+    depends:
+      - libcurl4
+      - libfontconfig1
+  rpm:
+    arch: ${RPM_ARCH}
+    depends:
+      - libcurl
+      - fontconfig

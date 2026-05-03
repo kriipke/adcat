@@ -2,15 +2,45 @@ name: Release
 
 on:
   push:
-    tags:
-      - xcat-*
+    branches: [main]
+    tags: ["xcat-v*"]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
 
 jobs:
-  build-manpage:
+  # On push to main: analyze conventional commits, bump version, create signed tag
+  release-plz:
+    name: "Semantic Release"
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: docker://asciidoctor/docker-asciidoctor
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run release-plz
+        uses: MarcoIeni/release-plz-action@v0.5
+        with:
+          command: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
+  # On tag push: build manpage artifact
+  build-manpage:
+    name: "Build Manpage"
+    if: startsWith(github.ref, 'refs/tags/xcat-v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build manpage
+        uses: docker://asciidoctor/docker-asciidoctor
         with:
           args: asciidoctor -b manpage -a reproducible xcat.1.adoc
       - uses: actions/upload-artifact@v4
@@ -18,77 +48,145 @@ jobs:
           name: xcat.1
           path: xcat.1
 
-  build-binaries:
-    runs-on: "${{ matrix.os }}"
+  # On tag push: build all targets, package tarballs + .deb/.rpm
+  build:
+    name: "Build (${{ matrix.target }})"
+    if: startsWith(github.ref, 'refs/tags/xcat-v')
     needs: build-manpage
+    runs-on: ${{ matrix.os }}
     permissions:
       id-token: write
-      contents: read
       attestations: write
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
         include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            use_cross: false
+            deb_arch: amd64
+            rpm_arch: x86_64
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            use_cross: true
+            deb_arch: arm64
+            rpm_arch: aarch64
+          - target: x86_64-apple-darwin
+            os: macos-13
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-      - uses: actions/download-artifact@v4
+      - uses: Swatinem/rust-cache@v2
         with:
-          path: ./artifacts
-      - run: mv artifacts/xcat.1 .
-      - run: cargo build --locked --target '${{ matrix.target }}' --release
-      - run: strip 'target/${{ matrix.target }}/release/xcat'
-        if: ${{ !contains(matrix.target, 'windows') }}
-      - id: version
+          key: ${{ matrix.target }}
+
+      - name: Download manpage
+        uses: actions/download-artifact@v4
+        with:
+          name: xcat.1
+
+      - name: Install cross
+        if: matrix.use_cross
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
+
+      - name: Install nfpm
+        if: matrix.deb_arch != ''
+        uses: taiki-e/install-action@v2
+        with:
+          tool: nfpm
+
+      - name: Install system dependencies
+        if: runner.os == 'Linux' && !matrix.use_cross
+        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev libfontconfig1-dev
+
+      - name: Build
         shell: bash
-        run: |
-          echo "version=$(cargo pkgid | cut -d'#' -f2 | cut -d: -f2)" >>"${GITHUB_OUTPUT}"
-      - id: package
+        run: ${{ matrix.use_cross && 'cross' || 'cargo' }} build --locked --target ${{ matrix.target }} --release
+
+      - name: Strip binary
+        if: "!matrix.use_cross && !contains(matrix.target, 'windows')"
+        shell: bash
+        run: strip "target/${{ matrix.target }}/release/xcat"
+
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: echo "version=${GITHUB_REF#refs/tags/xcat-v}" >> "$GITHUB_OUTPUT"
+
+      - name: Package tarball / zip
+        id: package
         shell: bash
         run: ./scripts/package '${{ steps.version.outputs.version }}' '${{ matrix.target }}'
-      - uses: actions/attest-build-provenance@v2
+
+      - name: Package .deb and .rpm
+        if: matrix.deb_arch != ''
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          TARGET: ${{ matrix.target }}
+          DEB_ARCH: ${{ matrix.deb_arch }}
+          RPM_ARCH: ${{ matrix.rpm_arch }}
+        run: |
+          envsubst < packaging/nfpm.yaml > nfpm.yaml
+          nfpm package --target deb
+          nfpm package --target rpm
+
+      - name: Attest provenance
+        uses: actions/attest-build-provenance@v2
         with:
           subject-path: ${{ steps.package.outputs.file }}
-      - uses: actions/upload-artifact@v4
+
+      - name: Upload tarball / zip
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.package.outputs.name }}
           path: ${{ steps.package.outputs.file }}
 
-  create-release:
+      - name: Upload .deb
+        if: matrix.deb_arch != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb-${{ matrix.deb_arch }}
+          path: "*.deb"
+
+      - name: Upload .rpm
+        if: matrix.deb_arch != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: rpm-${{ matrix.rpm_arch }}
+          path: "*.rpm"
+
+  # On tag push: create GitHub release with all artifacts
+  publish:
+    name: "Publish Release"
+    if: startsWith(github.ref, 'refs/tags/xcat-v')
+    needs: build
     runs-on: ubuntu-latest
-    needs: build-binaries
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: ./artifacts
-      - run: mkdir ./assets
-      - run: mv ./artifacts/*/*.{zip,tar.gz} ./assets
-      - run: b2sum *.{zip,tar.gz} > B2SUMS.txt
-        working-directory: assets
-      - id: version
+      - name: Collect artifacts
+        run: mkdir -p assets && find ./artifacts -type f -exec mv {} assets/ \;
+      - name: Generate checksums
+        run: cd assets && sha256sum * > SHA256SUMS.txt && b2sum * > B2SUMS.txt
+      - name: Extract version from tag
+        id: version
         shell: bash
-        run: |
-          echo "version=$(cargo pkgid | cut -d'#' -f2 | cut -d: -f2)" >>"${GITHUB_OUTPUT}"
-      - name: Extract changelog
-        shell: bash
-        run: |
-          awk -v r='${{ steps.version.outputs.version }}' \
-            '/^\[[^]]*\]/{print $0}/^## \[[0-9]/ && match($0, /\[[0-9][^]]*\]/){if (r == substr($0, RSTART+1, RLENGTH-2)) { p=1; next } else { p=0 } }p' \
-            CHANGELOG.md > ./CHANGELOG-release.md
-          cat CHANGELOG-release.md
+        run: echo "version=${GITHUB_REF#refs/tags/xcat-v}" >> "$GITHUB_OUTPUT"
       - uses: softprops/action-gh-release@v2
         with:
-          name: xcat-${{ steps.version.outputs.version }}
-          body_path: ./CHANGELOG-release.md
-          files: "./assets/*"
+          name: "xcat ${{ steps.version.outputs.version }}"
+          body_path: CHANGELOG.md
+          files: "assets/*"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

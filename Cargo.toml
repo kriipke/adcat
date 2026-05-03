@@ -37,13 +37,8 @@ anstyle-query = { version = "1.1.0", default-features = false }
 [package.metadata.release]
 release = true
 pre-release-replacements = [
-    # Update version and release date in manpage
     { file="xcat.1.adoc", search="(?m)^:revnumber:.*$", replace = ":revnumber: {{version}}" },
     { file="xcat.1.adoc", search="(?m)^:revdate:.*$", replace = ":revdate: {{date}}" },
-    # Update the changelog
-    { file="CHANGELOG.md", search="## \\[Unreleased\\]", replace = "## [Unreleased]\n\n## [{{version}}] – {{date}}", exactly = 1 },
-    { file="CHANGELOG.md", search="HEAD", replace = "{{tag_name}}", exactly = 1 },
-    { file="CHANGELOG.md", search="\\[Unreleased\\]: ", replace = "[Unreleased]: https://github.com/kriipke/xcat/compare/{{tag_name}}...HEAD\n[{{version}}]: ", exactly = 1 },
 ]
 
 [workspace]
@@ -69,15 +64,9 @@ insta = { version = "1.40.0", features = ["glob", "filters"] }
 url = "2.5.2"
 
 # Our own crates; pinned to an exact version because we release all of this repo
-# in a single version. cargo release takes care of updating these.
+# in a single version. release-plz takes care of updating these.
 pulldown-cmark-mdcat = { version = "=2.7.1", path = "pulldown-cmark-mdcat", default-features = false }
 
 [workspace.metadata.release]
 allow-branch = ["main"]
-pre-release-commit-message = "Release {{version}}"
-tag-prefix = "xcat-"
-tag-name = "{{prefix}}{{version}}"
-tag-message = "xcat {{version}}"
-sign-tag = true
-# Github CI does this for us.
-verify = false
+
