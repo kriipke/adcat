@@ -13,6 +13,12 @@ git_tag_enable = true
 # Skip semver API check (binary crate, no public API)
 semver_check = false
 
+[[package]]
+name = "pulldown-cmark-mdcat"
+release = false
+publish = false
+changelog_update = false
+
 [changelog]
 header = """# Changelog
 
