@@ -14,12 +14,6 @@ git_tag_enable = true
 git_push_enable = true
 # Skip semver API check (binary crate, no public API)
 semver_check = false
-# Only release from main
-allow_branch = ["main"]
-
-# GPG signing
-sign-commit = true
-sign-tag = true
 
 [changelog]
 header = """# Changelog
