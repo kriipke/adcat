@@ -3,7 +3,10 @@
 
 # xcat
 
-Fancy `cat` for Markdown (that is, [CommonMark][]) and AsciiDoc:
+Fancy `cat` for:
+
+1. Markdown ([CommonMark][])
+2. [AsciiDoc][] 
 
 ```
 $ xcat sample.md
@@ -16,6 +19,7 @@ xcat in [WezTerm], with "One Light (base16)", "Gruvbox Light", and "Darcula
 (base16)" (from left to right), and [JetBrains Mono] as font.
 
 [CommonMark]: http://commonmark.org
+[AsciiDoc]: https://gitlab.eclipse.org/eclipse/asciidoc-lang/asciidoc-lang/-/blob/main/spec/outline.adoc?ref_type=heads
 [Solarized]: http://ethanschoonover.com/solarized
 [dracula]: https://draculatheme.com/iterm/
 [wezterm]: https://wezfurlong.org/wezterm/
