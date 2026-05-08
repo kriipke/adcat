@@ -195,7 +195,9 @@ fn block_to_events(block: &Block, context: &mut RenderContext<'_>) -> Vec<Event<
         Block::Comment(_) => vec![],
         Block::DocumentAttribute(_) => vec![],
         Block::TableOfContents(_) => table_of_contents_to_events(context.toc_entries),
-        Block::Audio(audio) => media_block_to_events("Audio", &audio.source),
+        Block::Audio(audio) => {
+            media_block_to_events("Audio", &audio.title, &[audio.source.to_string()])
+        }
         Block::Video(video) => video_block_to_events(video),
         _ => unsupported_block_events("block"),
     }
@@ -270,28 +272,38 @@ fn table_of_contents_to_events(toc_entries: &[TocEntry<'_>]) -> Vec<Event<'stati
     events
 }
 
-fn media_block_to_events(label: &str, source: &acdc_parser::Source) -> Vec<Event<'static>> {
-    vec![
-        Event::Start(Tag::Paragraph),
-        Event::Text(format!("{label}: ").into()),
-        Event::Start(Tag::Link {
+fn media_block_to_events(
+    label: &str,
+    title: &acdc_parser::Title,
+    sources: &[String],
+) -> Vec<Event<'static>> {
+    let mut events = vec![Event::Start(Tag::Paragraph)];
+    events.push(Event::Text(label.to_string().into()));
+    if !title.is_empty() {
+        events.push(Event::Text(": ".into()));
+        events.extend(inlines_to_events(title.as_ref()));
+    }
+    events.push(Event::End(TagEnd::Paragraph));
+    events.push(Event::Start(Tag::List(None)));
+    for source in sources {
+        events.push(Event::Start(Tag::Item));
+        events.push(Event::Start(Tag::Link {
             link_type: LinkType::Inline,
-            dest_url: source.to_string().into(),
+            dest_url: source.clone().into(),
             title: CowStr::from(""),
             id: CowStr::from(""),
-        }),
-        Event::Text(source.to_string().into()),
-        Event::End(TagEnd::Link),
-        Event::End(TagEnd::Paragraph),
-    ]
+        }));
+        events.push(Event::Text(source.clone().into()));
+        events.push(Event::End(TagEnd::Link));
+        events.push(Event::End(TagEnd::Item));
+    }
+    events.push(Event::End(TagEnd::List(false)));
+    events
 }
 
 fn video_block_to_events(video: &acdc_parser::Video) -> Vec<Event<'static>> {
-    let mut events = Vec::new();
-    for source in &video.sources {
-        events.extend(media_block_to_events("Video", source));
-    }
-    events
+    let sources = video.sources.iter().map(ToString::to_string).collect::<Vec<_>>();
+    media_block_to_events("Video", &video.title, &sources)
 }
 
 fn table_alignment(
@@ -895,7 +907,7 @@ fn macro_to_events(macro_node: &InlineMacro) -> Vec<Event<'static>> {
                 xref.text.as_ref(),
             )
         }
-        InlineMacro::Pass(pass) => vec![Event::Text(pass.text.unwrap_or("").to_string().into())],
+        InlineMacro::Pass(pass) => vec![Event::Code(pass.text.unwrap_or("").to_string().into())],
         InlineMacro::Button(button) => vec![Event::Code(button.label.to_string().into())],
         InlineMacro::Keyboard(keyboard) => {
             vec![Event::Code(keyboard.keys.join("+").into())]
@@ -908,7 +920,9 @@ fn macro_to_events(macro_node: &InlineMacro) -> Vec<Event<'static>> {
             }
             vec![Event::Text(path.into())]
         }
-        InlineMacro::Stem(stem) => vec![Event::Code(stem.content.to_string().into())],
+        InlineMacro::Stem(stem) => {
+            vec![Event::Code(format!("{}: {}", stem.notation, stem.content).into())]
+        }
         InlineMacro::Icon(icon) => vec![Event::Text(icon.target.to_string().into())],
         InlineMacro::IndexTerm(index_term) => {
             if matches!(
@@ -1322,6 +1336,35 @@ mod tests {
         assert!(events.iter().any(|event| matches!(
             event,
             Event::Text(text) if text.as_ref() == "Summary line"
+        )));
+    }
+
+    #[test]
+    fn video_blocks_render_as_titled_link_lists() {
+        let events = parse_events(".Launch Demo\nvideo::movie.mp4[]\n");
+
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Text(text) if text.as_ref() == "Video"
+        )));
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Text(text) if text.as_ref() == "Launch Demo"
+        )));
+        assert!(events.iter().any(|event| matches!(event, Event::Start(Tag::List(None)))));
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Start(Tag::Link { dest_url, .. }) if dest_url.as_ref() == "movie.mp4"
+        )));
+    }
+
+    #[test]
+    fn stem_macros_render_as_code_with_notation() {
+        let events = parse_events("stem:[x^2]\n");
+
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Code(text) if text.as_ref().contains("x^2")
         )));
     }
 

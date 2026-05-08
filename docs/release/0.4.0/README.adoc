@@ -1,0 +1,34 @@
+= Phase 4 Release Summary
+
+== Phase Objective
+
+Improve the fidelity of media blocks and advanced inline macros so terminal output preserves more of the author's intent instead of collapsing those constructs into generic plain text.
+
+== Major Implementation Changes
+
+* Audio and video blocks in `src/asciidoc.rs` now render as structured sections with a label/title paragraph followed by linked source items.
+* Video blocks now preserve the block title and source list through a single shared media rendering path.
+* Inline stem macros now render as code with the notation name included, making the math dialect visible in terminal output.
+* Inline passthrough macros now render through the code-event path instead of plain text, improving literal fidelity for macros that reach the converter.
+
+== Tests Added Or Updated
+
+* Added a media rendering test proving titled video blocks emit both a label/title and linked source list.
+* Added a stem macro regression test proving notation-bearing code output is preserved.
+
+== Validation
+
+* `cargo test --workspace --locked`: passed
+* `cargo clippy --workspace --all-targets --locked`: passed
+* `cargo build --locked`: passed
+
+== Assumptions Made
+
+* Terminal output should prefer explicit structure over trying to mimic embedded media semantics that only make sense in HTML/PDF backends.
+* Including stem notation in rendered code is more useful than emitting the raw math body without its dialect context.
+
+== Known Risks Or Follow-up Items
+
+* Media rendering is still link-centric; it does not attempt playback or rich embedding semantics.
+* Passthrough coverage is improved in the converter, but parser-facing passthrough syntax remains broad enough that additional dedicated fixtures may be needed later.
+* Icon, menu, and keyboard macros still use terminal-friendly approximations rather than backend-specific presentation.
