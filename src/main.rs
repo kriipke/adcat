@@ -9,9 +9,9 @@
 
 //! Show CommonMark documents on TTYs.
 
+use adcat::{create_resource_handler, process_file};
 use clap::{CommandFactory, Parser};
 use clap_complete::generate;
-use adcat::{create_resource_handler, process_file};
 use pulldown_cmark_mdcat::terminal::{TerminalProgram, TerminalSize};
 use pulldown_cmark_mdcat::{Settings, Theme};
 use syntect::parsing::SyntaxSet;

@@ -9,8 +9,8 @@
 #![deny(warnings, clippy::all)]
 
 mod cli {
-    use std::fs;
     use std::ffi::OsStr;
+    use std::fs;
     use std::io::{Read, Write};
     use std::path::PathBuf;
     use std::process::{Command, Output, Stdio};
@@ -137,7 +137,11 @@ mod cli {
         let output = run_cargo_adcat(args);
         let stdout = String::from_utf8(output.stdout).unwrap();
 
-        assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
+        assert!(
+            output.status.success(),
+            "stderr: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
         assert!(stdout.contains("Before include."));
         assert!(stdout.contains("Included paragraph from another file."));
         assert!(stdout.contains("After include."));
@@ -157,7 +161,11 @@ mod cli {
         let output = run_cargo_adcat(args);
         let stdout = String::from_utf8(output.stdout).unwrap();
 
-        assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
+        assert!(
+            output.status.success(),
+            "stderr: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
         assert!(stdout.contains("Feature enabled"));
         assert!(stdout.contains("Missing disabled"));
         assert!(stdout.contains("Math works"));

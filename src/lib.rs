@@ -32,12 +32,12 @@ use output::Output;
 /// Argument parsing for adcat.
 #[allow(missing_docs)]
 pub mod args;
+/// AsciiDoc rendering support.
+pub mod asciidoc;
 /// Output handling for adcat.
 pub mod output;
 /// Resource handling for adcat.
 pub mod resources;
-/// AsciiDoc rendering support.
-pub mod asciidoc;
 
 /// Default read size limit for resources.
 pub static DEFAULT_RESOURCE_READ_LIMIT: u64 = 104_857_600;
@@ -134,10 +134,10 @@ pub fn process_file(
             Options::ENABLE_TASKLISTS | Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TABLES,
         );
         pulldown_cmark_mdcat::push_tty(settings, &env, resource_handler, &mut sink, parser)
-        .and_then(|_| {
-            event!(Level::TRACE, "Finished rendering, flushing output");
-            sink.flush()
-        })
+            .and_then(|_| {
+                event!(Level::TRACE, "Finished rendering, flushing output");
+                sink.flush()
+            })
     };
     result.or_else(|error| {
         if error.kind() == std::io::ErrorKind::BrokenPipe {

@@ -137,7 +137,9 @@ fn title_to_events_with_id(
 fn section_to_events(section: &Section, context: &mut RenderContext<'_>) -> Vec<Event<'static>> {
     let mut events = Vec::new();
     let level = heading_level(section.level);
-    let section_id = context.next_section_id().map(|id| CowStr::from(id.to_string()));
+    let section_id = context
+        .next_section_id()
+        .map(|id| CowStr::from(id.to_string()));
     events.extend(title_to_events_with_id(&section.title, level, section_id));
 
     for block in &section.content {
@@ -215,7 +217,11 @@ impl<'a> RenderContext<'a> {
 
 fn document_metadata_to_events(doc: &Document) -> Vec<Event<'static>> {
     let mut events = Vec::new();
-    if let Some(description) = doc.attributes.get("description").and_then(attribute_to_text) {
+    if let Some(description) = doc
+        .attributes
+        .get("description")
+        .and_then(attribute_to_text)
+    {
         events.push(Event::Start(Tag::Paragraph));
         events.push(Event::Text(description.into()));
         events.push(Event::End(TagEnd::Paragraph));
@@ -258,7 +264,9 @@ fn table_of_contents_to_events(toc_entries: &[TocEntry<'_>]) -> Vec<Event<'stati
     for entry in toc_entries {
         events.push(Event::Start(Tag::Item));
         if entry.level > 1 {
-            events.push(Event::Text("  ".repeat(entry.level.saturating_sub(1) as usize).into()));
+            events.push(Event::Text(
+                "  ".repeat(entry.level.saturating_sub(1) as usize).into(),
+            ));
         }
         events.push(Event::Start(Tag::Link {
             link_type: LinkType::Inline,
@@ -304,7 +312,11 @@ fn media_block_to_events(
 }
 
 fn video_block_to_events(video: &acdc_parser::Video) -> Vec<Event<'static>> {
-    let sources = video.sources.iter().map(ToString::to_string).collect::<Vec<_>>();
+    let sources = video
+        .sources
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
     media_block_to_events("Video", &video.title, &sources)
 }
 
@@ -406,7 +418,11 @@ fn expand_table_row(
     let mut column_index = 0usize;
 
     for cell in &row.columns {
-        consume_pending_rowspans(pending_rowspans.as_mut_slice(), &mut expanded, &mut column_index);
+        consume_pending_rowspans(
+            pending_rowspans.as_mut_slice(),
+            &mut expanded,
+            &mut column_index,
+        );
 
         let alignment = table_alignment(table, column_index, cell);
         let colspan = cell.colspan.max(1);
@@ -433,7 +449,11 @@ fn expand_table_row(
         column_index += colspan;
     }
 
-    consume_pending_rowspans(pending_rowspans.as_mut_slice(), &mut expanded, &mut column_index);
+    consume_pending_rowspans(
+        pending_rowspans.as_mut_slice(),
+        &mut expanded,
+        &mut column_index,
+    );
     expanded
 }
 
@@ -442,10 +462,16 @@ fn table_cell_text(blocks: &[Block]) -> String {
     for block in blocks {
         match block {
             Block::Paragraph(paragraph) => {
-                push_table_part(&mut parts, inlines_to_string(&paragraph.content).into_string());
+                push_table_part(
+                    &mut parts,
+                    inlines_to_string(&paragraph.content).into_string(),
+                );
             }
             Block::Image(image) => {
-                push_table_part(&mut parts, inlines_to_string(image.title.as_ref()).into_string());
+                push_table_part(
+                    &mut parts,
+                    inlines_to_string(image.title.as_ref()).into_string(),
+                );
             }
             Block::UnorderedList(list) => {
                 for item in &list.items {
@@ -500,7 +526,10 @@ fn table_cell_text(blocks: &[Block]) -> String {
                 for item in &list.items {
                     let principal = inlines_to_string(&item.principal).into_string();
                     if !principal.is_empty() {
-                        push_table_part(&mut parts, format!("<{}> {principal}", item.callout.number));
+                        push_table_part(
+                            &mut parts,
+                            format!("<{}> {principal}", item.callout.number),
+                        );
                     }
                     let nested = table_cell_text(&item.blocks);
                     if !nested.is_empty() {
@@ -755,7 +784,10 @@ fn non_numeric_ordered_list_markers(list: &OrderedList) -> Option<Vec<String>> {
                 .collect(),
         );
     }
-    if trimmed.chars().all(|c| matches!(c, 'i' | 'v' | 'x' | 'l' | 'c' | 'd' | 'm')) {
+    if trimmed
+        .chars()
+        .all(|c| matches!(c, 'i' | 'v' | 'x' | 'l' | 'c' | 'd' | 'm'))
+    {
         let start = roman_to_number(trimmed)?;
         return Some(
             (start..start + list.items.len())
@@ -783,7 +815,11 @@ fn alpha_marker(mut value: usize, uppercase: bool) -> String {
     while value > 0 {
         value -= 1;
         let ch = (b'a' + (value % 26) as u8) as char;
-        chars.push(if uppercase { ch.to_ascii_uppercase() } else { ch });
+        chars.push(if uppercase {
+            ch.to_ascii_uppercase()
+        } else {
+            ch
+        });
         value /= 26;
     }
     chars.iter().rev().collect()
@@ -923,7 +959,10 @@ fn delimited_block_to_events(
             events
         }
         DelimitedBlockType::DelimitedVerse(inlines) => {
-            let mut events = vec![Event::Start(Tag::BlockQuote(None)), Event::Start(Tag::Paragraph)];
+            let mut events = vec![
+                Event::Start(Tag::BlockQuote(None)),
+                Event::Start(Tag::Paragraph),
+            ];
             events.extend(inlines_to_events(inlines));
             events.push(Event::End(TagEnd::Paragraph));
             events.push(Event::End(TagEnd::BlockQuote(None)));
@@ -1017,10 +1056,9 @@ fn inline_to_events(inline: &InlineNode) -> Vec<Event<'static>> {
         InlineNode::LineBreak(_) => vec![Event::SoftBreak],
         InlineNode::Macro(m) => macro_to_events(m),
         InlineNode::InlineAnchor(anchor) => {
-            vec![Event::InlineHtml(format!(
-                "<a id=\"{}\"></a>",
-                html_escape(anchor.id)
-            ).into())]
+            vec![Event::InlineHtml(
+                format!("<a id=\"{}\"></a>", html_escape(anchor.id)).into(),
+            )]
         }
         InlineNode::CalloutRef(callout) => {
             vec![Event::Text(format!("<{}>", callout.number).into())]
@@ -1071,13 +1109,11 @@ fn macro_to_events(macro_node: &InlineMacro) -> Vec<Event<'static>> {
             let dest = source_to_cowstr(&mailto.target);
             link_with_inline_text_events(LinkType::Email, dest, &mailto.text)
         }
-        InlineMacro::CrossReference(xref) => {
-            link_with_inline_text_events(
-                LinkType::Inline,
-                format!("#{}", xref.target).into(),
-                xref.text.as_ref(),
-            )
-        }
+        InlineMacro::CrossReference(xref) => link_with_inline_text_events(
+            LinkType::Inline,
+            format!("#{}", xref.target).into(),
+            xref.text.as_ref(),
+        ),
         InlineMacro::Pass(pass) => vec![Event::Code(pass.text.unwrap_or("").to_string().into())],
         InlineMacro::Button(button) => vec![Event::Code(button.label.to_string().into())],
         InlineMacro::Keyboard(keyboard) => {
@@ -1092,14 +1128,13 @@ fn macro_to_events(macro_node: &InlineMacro) -> Vec<Event<'static>> {
             vec![Event::Text(path.into())]
         }
         InlineMacro::Stem(stem) => {
-            vec![Event::Code(format!("{}: {}", stem.notation, stem.content).into())]
+            vec![Event::Code(
+                format!("{}: {}", stem.notation, stem.content).into(),
+            )]
         }
         InlineMacro::Icon(icon) => vec![Event::Text(icon.target.to_string().into())],
         InlineMacro::IndexTerm(index_term) => {
-            if matches!(
-                &index_term.kind,
-                acdc_parser::IndexTermKind::Flow(_)
-            ) {
+            if matches!(&index_term.kind, acdc_parser::IndexTermKind::Flow(_)) {
                 vec![Event::Text(index_term.term().to_string().into())]
             } else {
                 vec![]
@@ -1258,17 +1293,28 @@ mod tests {
             })
             .collect();
 
-        assert_eq!(headings, vec![HeadingLevel::H1, HeadingLevel::H2, HeadingLevel::H3]);
+        assert_eq!(
+            headings,
+            vec![HeadingLevel::H1, HeadingLevel::H2, HeadingLevel::H3]
+        );
     }
 
     #[test]
     fn paragraphs_preserve_inline_formatting() {
         let events = parse_events("A *bold* _italic_ https://example.com[] word.\n");
 
-        assert!(events.iter().any(|event| matches!(event, Event::Start(Tag::Strong))));
-        assert!(events.iter().any(|event| matches!(event, Event::End(TagEnd::Strong))));
-        assert!(events.iter().any(|event| matches!(event, Event::Start(Tag::Emphasis))));
-        assert!(events.iter().any(|event| matches!(event, Event::End(TagEnd::Emphasis))));
+        assert!(events
+            .iter()
+            .any(|event| matches!(event, Event::Start(Tag::Strong))));
+        assert!(events
+            .iter()
+            .any(|event| matches!(event, Event::End(TagEnd::Strong))));
+        assert!(events
+            .iter()
+            .any(|event| matches!(event, Event::Start(Tag::Emphasis))));
+        assert!(events
+            .iter()
+            .any(|event| matches!(event, Event::End(TagEnd::Emphasis))));
         assert!(events.iter().any(|event| matches!(
             event,
             Event::Start(Tag::Link {
@@ -1282,8 +1328,12 @@ mod tests {
     fn list_items_preserve_inline_formatting() {
         let events = parse_events("* item with *bold*\n");
 
-        assert!(events.iter().any(|event| matches!(event, Event::Start(Tag::Item))));
-        assert!(events.iter().any(|event| matches!(event, Event::Start(Tag::Strong))));
+        assert!(events
+            .iter()
+            .any(|event| matches!(event, Event::Start(Tag::Item))));
+        assert!(events
+            .iter()
+            .any(|event| matches!(event, Event::Start(Tag::Strong))));
     }
 
     #[test]
@@ -1362,7 +1412,9 @@ mod tests {
     fn verse_blocks_are_no_longer_dropped() {
         let events = parse_events("[verse]\n____\nRoses are red\nViolets are blue\n____\n");
 
-        assert!(events.iter().any(|event| matches!(event, Event::Start(Tag::BlockQuote(None)))));
+        assert!(events
+            .iter()
+            .any(|event| matches!(event, Event::Start(Tag::BlockQuote(None)))));
         assert!(events.iter().any(|event| matches!(
             event,
             Event::Text(text) if text.as_ref().contains("Roses are red")
@@ -1432,14 +1484,11 @@ mod tests {
 
     #[test]
     fn callout_lists_are_rendered_as_lists() {
-        let events = parse_events(
-            "[source]\n----\nlet x = 1; <1>\n----\n<1> first callout\n",
-        );
+        let events = parse_events("[source]\n----\nlet x = 1; <1>\n----\n<1> first callout\n");
 
-        assert!(events.iter().any(|event| matches!(
-            event,
-            Event::Start(Tag::List(Some(1)))
-        )));
+        assert!(events
+            .iter()
+            .any(|event| matches!(event, Event::Start(Tag::List(Some(1))))));
         assert!(events.iter().any(|event| matches!(
             event,
             Event::Text(text) if text.as_ref() == "first callout"
@@ -1450,9 +1499,15 @@ mod tests {
     fn simple_tables_are_rendered_as_table_events() {
         let events = parse_events("|===\n| A | B\n| C | D\n|===\n");
 
-        assert!(events.iter().any(|event| matches!(event, Event::Start(Tag::Table(_)))));
-        assert!(events.iter().any(|event| matches!(event, Event::Start(Tag::TableRow))));
-        assert!(events.iter().any(|event| matches!(event, Event::Start(Tag::TableCell))));
+        assert!(events
+            .iter()
+            .any(|event| matches!(event, Event::Start(Tag::Table(_)))));
+        assert!(events
+            .iter()
+            .any(|event| matches!(event, Event::Start(Tag::TableRow))));
+        assert!(events
+            .iter()
+            .any(|event| matches!(event, Event::Start(Tag::TableCell))));
         assert!(events.iter().any(|event| matches!(
             event,
             Event::Text(text) if text.as_ref() == "A"
@@ -1467,7 +1522,9 @@ mod tests {
     fn header_tables_emit_table_head() {
         let events = parse_events("[options=\"header\"]\n|===\n| Name | Age\n| Ada | 42\n|===\n");
 
-        assert!(events.iter().any(|event| matches!(event, Event::Start(Tag::TableHead))));
+        assert!(events
+            .iter()
+            .any(|event| matches!(event, Event::Start(Tag::TableHead))));
         assert!(events.iter().any(|event| matches!(
             event,
             Event::Text(text) if text.as_ref() == "Name"
@@ -1494,7 +1551,9 @@ mod tests {
             .iter()
             .enumerate()
             .skip(footer_marker_index + 1)
-            .find_map(|(index, event)| matches!(event, Event::Start(Tag::TableRow)).then_some(index))
+            .find_map(|(index, event)| {
+                matches!(event, Event::Start(Tag::TableRow)).then_some(index)
+            })
             .expect("expected footer row");
 
         assert!(footer_marker_index < footer_row_index);
@@ -1550,7 +1609,9 @@ mod tests {
             event,
             Event::Text(text) if text.as_ref() == "Launch Demo"
         )));
-        assert!(events.iter().any(|event| matches!(event, Event::Start(Tag::List(None)))));
+        assert!(events
+            .iter()
+            .any(|event| matches!(event, Event::Start(Tag::List(None)))));
         assert!(events.iter().any(|event| matches!(
             event,
             Event::Start(Tag::Link { dest_url, .. }) if dest_url.as_ref() == "movie.mp4"

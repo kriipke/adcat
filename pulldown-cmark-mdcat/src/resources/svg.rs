@@ -15,9 +15,9 @@ pub fn render_svg_to_png(svg: &[u8]) -> Result<Vec<u8>> {
 
 #[cfg(feature = "svg")]
 mod implementation {
+    use std::error::Error;
     use std::fmt::Display;
     use std::sync::{Arc, OnceLock};
-    use std::error::Error;
 
     use resvg::tiny_skia::{IntSize, Pixmap, Transform};
     use resvg::usvg::{self, Tree};

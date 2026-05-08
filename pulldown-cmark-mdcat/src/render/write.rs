@@ -369,7 +369,12 @@ fn calculate_column_widths(table: &CurrentTable) -> Option<Vec<usize>> {
         .iter()
         .chain(table.rows.iter())
         .chain(table.footer.iter())
-        .map(|row| row.cells.iter().map(|cell| cell.colspan.max(1)).sum::<usize>())
+        .map(|row| {
+            row.cells
+                .iter()
+                .map(|cell| cell.colspan.max(1))
+                .sum::<usize>()
+        })
         .max()?;
     let mut widths = vec![0; logical_columns];
     let rows = table
@@ -391,7 +396,8 @@ fn calculate_column_widths(table: &CurrentTable) -> Option<Vec<usize>> {
             if colspan == 1 {
                 widths[column_index] = max(widths[column_index], content_width);
             } else {
-                let current_width: usize = widths[column_index..column_index + colspan].iter().sum();
+                let current_width: usize =
+                    widths[column_index..column_index + colspan].iter().sum();
                 if current_width < content_width {
                     widths[column_index + colspan - 1] += content_width - current_width;
                 }
@@ -451,19 +457,16 @@ pub fn write_table<W: Write>(
 
         // Write the table head in bold if any.
         if let Some(head) = table.head {
-            let lines = head
-                .cells
-                .iter()
-                .map(table_cell_lines)
-                .collect::<Vec<_>>();
+            let lines = head.cells.iter().map(table_cell_lines).collect::<Vec<_>>();
             let row_height = lines.iter().map(Vec::len).max().unwrap_or(1);
             for line_index in 0..row_height {
                 let mut column_index = 0usize;
                 for (cell_lines, cell) in zip(lines.iter(), &head.cells) {
                     let colspan = cell.colspan.max(1);
-                    let width: usize =
-                        widths[column_index..column_index + colspan].iter().sum::<usize>()
-                            + 2 * (colspan - 1);
+                    let width: usize = widths[column_index..column_index + colspan]
+                        .iter()
+                        .sum::<usize>()
+                        + 2 * (colspan - 1);
                     let alignment = table.alignments[column_index];
                     let content = cell_lines.get(line_index).map_or("", String::as_str);
                     write_styled(
@@ -487,9 +490,10 @@ pub fn write_table<W: Write>(
                 let mut column_index = 0usize;
                 for (cell_lines, cell) in zip(lines.iter(), &row.cells) {
                     let colspan = cell.colspan.max(1);
-                    let width: usize =
-                        widths[column_index..column_index + colspan].iter().sum::<usize>()
-                            + 2 * (colspan - 1);
+                    let width: usize = widths[column_index..column_index + colspan]
+                        .iter()
+                        .sum::<usize>()
+                        + 2 * (colspan - 1);
                     let alignment = table.alignments[column_index];
                     let content = cell_lines.get(line_index).map_or("", String::as_str);
                     write_styled(
@@ -513,9 +517,10 @@ pub fn write_table<W: Write>(
                 let mut column_index = 0usize;
                 for (cell_lines, cell) in zip(lines.iter(), &row.cells) {
                     let colspan = cell.colspan.max(1);
-                    let width: usize =
-                        widths[column_index..column_index + colspan].iter().sum::<usize>()
-                            + 2 * (colspan - 1);
+                    let width: usize = widths[column_index..column_index + colspan]
+                        .iter()
+                        .sum::<usize>()
+                        + 2 * (colspan - 1);
                     let alignment = table.alignments[column_index];
                     let content = cell_lines.get(line_index).map_or("", String::as_str);
                     write_styled(
@@ -546,7 +551,10 @@ mod tests {
             colspan: 1,
         };
 
-        assert_eq!(table_cell_lines(&cell), vec!["alpha".to_string(), "beta".to_string()]);
+        assert_eq!(
+            table_cell_lines(&cell),
+            vec!["alpha".to_string(), "beta".to_string()]
+        );
     }
 
     #[test]
