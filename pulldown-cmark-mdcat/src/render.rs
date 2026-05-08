@@ -43,6 +43,9 @@ pub use data::StateData;
 pub use state::State;
 pub use state::StateAndData;
 
+const TABLE_CELL_SPAN_MARKER_PREFIX: &str = "<!--xcat:table-cell colspan=";
+const TABLE_CELL_SPAN_MARKER_SUFFIX: &str = "-->";
+
 const TABLE_FOOTER_MARKER: &str = "<!--xcat:table-footer-->";
 
 #[allow(clippy::cognitive_complexity)]
@@ -904,6 +907,22 @@ pub fn write_event<'a, W: Write>(
         }
         (Stacked(stack, TableBlock), Text(text)) | (Stacked(stack, TableBlock), Code(text)) => {
             let current_table = data.current_table.push_fragment(text);
+            let data = StateData {
+                current_table,
+                ..data
+            };
+            Stacked(stack, TableBlock).and_data(data).ok()
+        }
+        (Stacked(stack, TableBlock), InlineHtml(html))
+            if html.as_ref().starts_with(TABLE_CELL_SPAN_MARKER_PREFIX)
+                && html.as_ref().ends_with(TABLE_CELL_SPAN_MARKER_SUFFIX) =>
+        {
+            let raw = html
+                .as_ref()
+                .trim_start_matches(TABLE_CELL_SPAN_MARKER_PREFIX)
+                .trim_end_matches(TABLE_CELL_SPAN_MARKER_SUFFIX);
+            let colspan = raw.parse::<usize>().unwrap_or(1);
+            let current_table = data.current_table.set_current_cell_colspan(colspan);
             let data = StateData {
                 current_table,
                 ..data

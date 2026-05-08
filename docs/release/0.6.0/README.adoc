@@ -1,0 +1,36 @@
+= Phase 6 Release Summary
+
+== Phase Objective
+
+Introduce an internal renderer metadata channel for AsciiDoc table semantics so merged table cells can carry colspan information through the Markdown-oriented event pipeline.
+
+== Major Implementation Changes
+
+* Added internal table-cell span markers in `src/asciidoc.rs` and stopped expanding colspan into visible blank placeholder cells.
+* Extended `ExpandedTableCell` with colspan metadata and updated rowspan bookkeeping to preserve span width across continued rows.
+* Extended `pulldown-cmark-mdcat/src/render/data.rs` so `TableCell` stores colspan and the current table state can update the active cell span while parsing events.
+* Updated `pulldown-cmark-mdcat/src/render.rs` to consume the new internal span markers during table rendering.
+* Reworked `pulldown-cmark-mdcat/src/render/write.rs` so width calculation and row emission operate in logical-column space while allowing a rendered cell to span multiple columns.
+
+== Tests Added Or Updated
+
+* Updated the AsciiDoc span regression to assert metadata-bearing colspan output instead of blank-cell expansion.
+* Added a renderer unit test proving width calculation respects colspan cells.
+* Preserved the existing footer and multiline table coverage to ensure the new metadata channel coexists with earlier table work.
+
+== Validation
+
+* `cargo test --workspace --locked`: passed
+* `cargo clippy --workspace --all-targets --locked`: passed
+* `cargo build --locked`: passed
+
+== Assumptions Made
+
+* An internal event marker shared by `xcat` and its bundled renderer is an acceptable escape hatch when `pulldown-cmark` lacks the native semantics needed for high-fidelity AsciiDoc tables.
+* Colspan is the most valuable merged-cell behavior to preserve first in terminal output because it directly affects visible row shape.
+
+== Known Risks Or Follow-up Items
+
+* Rowspan is still represented as continued blank cells rather than a fully merged multirow renderer.
+* Table cells are still flattened to readable text, so nested block structure inside cells is not yet first-class render data.
+* The internal table metadata channel remains specific to this repository's converter and renderer pairing.

@@ -13,6 +13,8 @@ use acdc_parser::{
 use pulldown_cmark::{Alignment, CowStr, Event, HeadingLevel, LinkType, Tag, TagEnd};
 
 pub(crate) const TABLE_FOOTER_MARKER: &str = "<!--xcat:table-footer-->";
+pub(crate) const TABLE_CELL_SPAN_MARKER_PREFIX: &str = "<!--xcat:table-cell colspan=";
+pub(crate) const TABLE_CELL_SPAN_MARKER_SUFFIX: &str = "-->";
 
 struct RenderContext<'a> {
     toc_entries: &'a [TocEntry<'a>],
@@ -325,12 +327,15 @@ fn table_alignment(
 struct ExpandedTableCell {
     text: String,
     alignment: Alignment,
+    colspan: usize,
 }
 
 #[derive(Clone, Debug)]
 struct PendingRowSpan {
     remaining_rows: usize,
     alignment: Alignment,
+    colspan: usize,
+    continuation: bool,
 }
 
 fn consume_pending_rowspans(
@@ -346,15 +351,26 @@ fn consume_pending_rowspans(
         let span = pending_rowspans[*column_index]
             .as_mut()
             .expect("checked is_some");
-        expanded.push(ExpandedTableCell {
-            text: String::new(),
-            alignment: span.alignment,
-        });
-        span.remaining_rows = span.remaining_rows.saturating_sub(1);
-        if span.remaining_rows == 0 {
-            pending_rowspans[*column_index] = None;
+        let colspan = span.colspan.max(1);
+        if !span.continuation {
+            expanded.push(ExpandedTableCell {
+                text: String::new(),
+                alignment: span.alignment,
+                colspan,
+            });
         }
-        *column_index += 1;
+        for offset in 0..colspan {
+            if let Some(active) = pending_rowspans
+                .get_mut(*column_index + offset)
+                .and_then(Option::as_mut)
+            {
+                active.remaining_rows = active.remaining_rows.saturating_sub(1);
+                if active.remaining_rows == 0 {
+                    pending_rowspans[*column_index + offset] = None;
+                }
+            }
+        }
+        *column_index += colspan;
     }
 }
 
@@ -399,34 +415,22 @@ fn expand_table_row(
         expanded.push(ExpandedTableCell {
             text: table_cell_text(&cell.content),
             alignment,
+            colspan,
         });
-        if pending_rowspans.len() <= column_index {
-            pending_rowspans.resize(column_index + 1, None);
+        if pending_rowspans.len() < column_index + colspan {
+            pending_rowspans.resize(column_index + colspan, None);
         }
         if rowspan > 1 {
-            pending_rowspans[column_index] = Some(PendingRowSpan {
-                remaining_rows: rowspan - 1,
-                alignment,
-            });
-        }
-        column_index += 1;
-
-        for _ in 1..colspan {
-            expanded.push(ExpandedTableCell {
-                text: String::new(),
-                alignment,
-            });
-            if pending_rowspans.len() <= column_index {
-                pending_rowspans.resize(column_index + 1, None);
-            }
-            if rowspan > 1 {
-                pending_rowspans[column_index] = Some(PendingRowSpan {
+            for offset in 0..colspan {
+                pending_rowspans[column_index + offset] = Some(PendingRowSpan {
                     remaining_rows: rowspan - 1,
                     alignment,
+                    colspan,
+                    continuation: offset > 0,
                 });
             }
-            column_index += 1;
         }
+        column_index += colspan;
     }
 
     consume_pending_rowspans(pending_rowspans.as_mut_slice(), &mut expanded, &mut column_index);
@@ -575,6 +579,15 @@ fn table_row_to_events(row: &[ExpandedTableCell]) -> Vec<Event<'static>> {
     let mut events = vec![Event::Start(Tag::TableRow)];
     for column in row {
         events.push(Event::Start(Tag::TableCell));
+        if column.colspan > 1 {
+            events.push(Event::InlineHtml(
+                format!(
+                    "{TABLE_CELL_SPAN_MARKER_PREFIX}{}{TABLE_CELL_SPAN_MARKER_SUFFIX}",
+                    column.colspan
+                )
+                .into(),
+            ));
+        }
         events.push(Event::Text(column.text.clone().into()));
         events.push(Event::End(TagEnd::TableCell));
     }
@@ -602,7 +615,11 @@ fn table_to_events(table: &acdc_parser::Table) -> Vec<Event<'static>> {
         .as_ref()
         .or_else(|| expanded_rows.first())
         .or(expanded_footer.as_ref())
-        .map(|row| row.iter().map(|cell| cell.alignment).collect())
+        .map(|row| {
+            row.iter()
+                .flat_map(|cell| std::iter::repeat_n(cell.alignment, cell.colspan))
+                .collect()
+        })
         .unwrap_or_default();
 
     let mut events = vec![Event::Start(Tag::Table(alignments))];
@@ -1586,7 +1603,15 @@ mod tests {
             .iter()
             .filter(|event| matches!(event, Event::Start(Tag::TableCell)))
             .count();
-        assert_eq!(cells, 4);
+        assert_eq!(cells, 3);
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::InlineHtml(html)
+                if html.as_ref()
+                    == format!(
+                        "{TABLE_CELL_SPAN_MARKER_PREFIX}2{TABLE_CELL_SPAN_MARKER_SUFFIX}"
+                    )
+        )));
         assert!(events.iter().any(|event| matches!(
             event,
             Event::Text(text) if text.as_ref() == "wide"

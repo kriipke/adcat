@@ -364,27 +364,40 @@ pub fn write_start_heading<W: Write>(
 }
 
 fn calculate_column_widths(table: &CurrentTable) -> Option<Vec<usize>> {
-    let first_row = table
+    let logical_columns = table
         .head
-        .as_ref()
-        .or(table.rows.first())
-        .or(table.footer.first())?;
-    let mut widths = vec![0; first_row.cells.len()];
+        .iter()
+        .chain(table.rows.iter())
+        .chain(table.footer.iter())
+        .map(|row| row.cells.iter().map(|cell| cell.colspan.max(1)).sum::<usize>())
+        .max()?;
+    let mut widths = vec![0; logical_columns];
     let rows = table
         .head
         .iter()
         .chain(table.rows.as_slice())
         .chain(table.footer.as_slice());
     for row in rows {
-        let current = row.cells.as_slice().iter().map(|cell| {
-            cell.fragments
+        let mut column_index = 0usize;
+        for cell in &row.cells {
+            let content_width = cell
+                .fragments
                 .join("")
                 .lines()
                 .map(display_width)
                 .max()
-                .unwrap_or(0)
-        });
-        widths = zip(widths, current).map(|(a, b)| max(a, b)).collect();
+                .unwrap_or(0);
+            let colspan = cell.colspan.max(1);
+            if colspan == 1 {
+                widths[column_index] = max(widths[column_index], content_width);
+            } else {
+                let current_width: usize = widths[column_index..column_index + colspan].iter().sum();
+                if current_width < content_width {
+                    widths[column_index + colspan - 1] += content_width - current_width;
+                }
+            }
+            column_index += colspan;
+        }
     }
     Some(widths)
 }
@@ -445,10 +458,13 @@ pub fn write_table<W: Write>(
                 .collect::<Vec<_>>();
             let row_height = lines.iter().map(Vec::len).max().unwrap_or(1);
             for line_index in 0..row_height {
-                for (((cell_lines, &width), &alignment), _cell) in zip(
-                    zip(zip(lines.iter(), &widths), &table.alignments),
-                    &head.cells,
-                ) {
+                let mut column_index = 0usize;
+                for (cell_lines, cell) in zip(lines.iter(), &head.cells) {
+                    let colspan = cell.colspan.max(1);
+                    let width: usize =
+                        widths[column_index..column_index + colspan].iter().sum::<usize>()
+                            + 2 * (colspan - 1);
+                    let alignment = table.alignments[column_index];
                     let content = cell_lines.get(line_index).map_or("", String::as_str);
                     write_styled(
                         writer,
@@ -456,6 +472,7 @@ pub fn write_table<W: Write>(
                         &Style::new().bold(),
                         format_table_cell_line(content, width, alignment),
                     )?;
+                    column_index += colspan;
                 }
                 writeln!(writer)?;
             }
@@ -467,10 +484,13 @@ pub fn write_table<W: Write>(
             let lines = row.cells.iter().map(table_cell_lines).collect::<Vec<_>>();
             let row_height = lines.iter().map(Vec::len).max().unwrap_or(1);
             for line_index in 0..row_height {
-                for (((cell_lines, &width), &alignment), _cell) in zip(
-                    zip(zip(lines.iter(), &widths), &table.alignments),
-                    &row.cells,
-                ) {
+                let mut column_index = 0usize;
+                for (cell_lines, cell) in zip(lines.iter(), &row.cells) {
+                    let colspan = cell.colspan.max(1);
+                    let width: usize =
+                        widths[column_index..column_index + colspan].iter().sum::<usize>()
+                            + 2 * (colspan - 1);
+                    let alignment = table.alignments[column_index];
                     let content = cell_lines.get(line_index).map_or("", String::as_str);
                     write_styled(
                         writer,
@@ -478,6 +498,7 @@ pub fn write_table<W: Write>(
                         &Style::new(),
                         format_table_cell_line(content, width, alignment),
                     )?;
+                    column_index += colspan;
                 }
                 writeln!(writer)?;
             }
@@ -489,10 +510,13 @@ pub fn write_table<W: Write>(
             let lines = row.cells.iter().map(table_cell_lines).collect::<Vec<_>>();
             let row_height = lines.iter().map(Vec::len).max().unwrap_or(1);
             for line_index in 0..row_height {
-                for (((cell_lines, &width), &alignment), _cell) in zip(
-                    zip(zip(lines.iter(), &widths), &table.alignments),
-                    &row.cells,
-                ) {
+                let mut column_index = 0usize;
+                for (cell_lines, cell) in zip(lines.iter(), &row.cells) {
+                    let colspan = cell.colspan.max(1);
+                    let width: usize =
+                        widths[column_index..column_index + colspan].iter().sum::<usize>()
+                            + 2 * (colspan - 1);
+                    let alignment = table.alignments[column_index];
                     let content = cell_lines.get(line_index).map_or("", String::as_str);
                     write_styled(
                         writer,
@@ -500,6 +524,7 @@ pub fn write_table<W: Write>(
                         &Style::new(),
                         format_table_cell_line(content, width, alignment),
                     )?;
+                    column_index += colspan;
                 }
                 writeln!(writer)?;
             }
@@ -518,6 +543,7 @@ mod tests {
     fn table_cell_lines_preserves_multiline_content() {
         let cell = TableCell {
             fragments: vec!["alpha\nbeta".into()],
+            colspan: 1,
         };
 
         assert_eq!(table_cell_lines(&cell), vec!["alpha".to_string(), "beta".to_string()]);
@@ -530,6 +556,7 @@ mod tests {
             rows: vec![crate::render::data::TableRow {
                 cells: vec![TableCell {
                     fragments: vec!["a\nlonger".into()],
+                    colspan: 1,
                 }],
                 current_cell: TableCell::empty(),
             }],
@@ -549,12 +576,14 @@ mod tests {
             rows: vec![crate::render::data::TableRow {
                 cells: vec![TableCell {
                     fragments: vec!["body".into()],
+                    colspan: 1,
                 }],
                 current_cell: TableCell::empty(),
             }],
             footer: vec![crate::render::data::TableRow {
                 cells: vec![TableCell {
                     fragments: vec!["footer".into()],
+                    colspan: 1,
                 }],
                 current_cell: TableCell::empty(),
             }],
@@ -576,5 +605,31 @@ mod tests {
         assert!(rendered.contains(" body "));
         assert!(rendered.contains(" footer "));
         assert!(rendered.matches('─').count() >= 2);
+    }
+
+    #[test]
+    fn calculate_column_widths_respects_colspan_cells() {
+        let table = CurrentTable {
+            head: None,
+            rows: vec![crate::render::data::TableRow {
+                cells: vec![
+                    TableCell {
+                        fragments: vec!["wide-cell".into()],
+                        colspan: 2,
+                    },
+                    TableCell {
+                        fragments: vec!["tail".into()],
+                        colspan: 1,
+                    },
+                ],
+                current_cell: TableCell::empty(),
+            }],
+            footer: Vec::new(),
+            current_row: crate::render::data::TableRow::empty(),
+            alignments: vec![Alignment::Left, Alignment::Left, Alignment::Left],
+            current_section: crate::render::data::TableSection::Body,
+        };
+
+        assert_eq!(calculate_column_widths(&table), Some(vec![0, 9, 4]));
     }
 }

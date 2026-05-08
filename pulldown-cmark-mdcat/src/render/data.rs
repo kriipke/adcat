@@ -56,6 +56,8 @@ pub struct TableCell<'a> {
     // TODO: Support styles of fragments.
     /// Renderable fragments in a table cell.
     pub(super) fragments: Vec<CowStr<'a>>,
+    /// How many logical columns this cell spans.
+    pub(super) colspan: usize,
 }
 
 impl TableCell<'_> {
@@ -63,6 +65,7 @@ impl TableCell<'_> {
     pub(super) fn empty() -> Self {
         Self {
             fragments: Vec::new(),
+            colspan: 1,
         }
     }
 }
@@ -137,6 +140,12 @@ impl<'a> CurrentTable<'a> {
     pub(super) fn end_cell(mut self) -> Self {
         self.current_row.cells.push(self.current_row.current_cell);
         self.current_row.current_cell = TableCell::empty();
+        self
+    }
+
+    /// Set the colspan of the current cell.
+    pub(super) fn set_current_cell_colspan(mut self, colspan: usize) -> Self {
+        self.current_row.current_cell.colspan = colspan.max(1);
         self
     }
 
