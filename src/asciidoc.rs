@@ -655,6 +655,20 @@ fn ordered_list_to_events(
     list: &OrderedList,
     context: &mut RenderContext<'_>,
 ) -> Vec<Event<'static>> {
+    if let Some(markers) = non_numeric_ordered_list_markers(list) {
+        let mut events = Vec::new();
+        for (item, marker) in list.items.iter().zip(markers) {
+            events.push(Event::Start(Tag::Paragraph));
+            events.push(Event::Text(format!("{marker} ").into()));
+            events.extend(inlines_to_events(&item.principal));
+            events.push(Event::End(TagEnd::Paragraph));
+            for block in &item.blocks {
+                events.extend(block_to_events(block, context));
+            }
+        }
+        return events;
+    }
+
     let start = list
         .marker
         .chars()
@@ -670,6 +684,146 @@ fn ordered_list_to_events(
     }
     events.push(Event::End(TagEnd::List(true)));
     events
+}
+
+fn non_numeric_ordered_list_markers(list: &OrderedList) -> Option<Vec<String>> {
+    match list.metadata.style {
+        Some("loweralpha") => {
+            return Some(
+                (1..=list.items.len())
+                    .map(|value| format!("{}.", alpha_marker(value, false)))
+                    .collect(),
+            );
+        }
+        Some("upperalpha") => {
+            return Some(
+                (1..=list.items.len())
+                    .map(|value| format!("{}.", alpha_marker(value, true)))
+                    .collect(),
+            );
+        }
+        Some("lowerroman") => {
+            return Some(
+                (1..=list.items.len())
+                    .map(|value| format!("{}.", number_to_roman(value, false)))
+                    .collect(),
+            );
+        }
+        Some("upperroman") => {
+            return Some(
+                (1..=list.items.len())
+                    .map(|value| format!("{}.", number_to_roman(value, true)))
+                    .collect(),
+            );
+        }
+        _ => {}
+    }
+
+    let marker = list.marker.trim();
+    let trimmed = marker.trim_end_matches(['.', ')']);
+
+    if trimmed.len() == 1 && trimmed.chars().all(|c| c.is_ascii_lowercase()) {
+        let start = (trimmed.as_bytes()[0] - b'a' + 1) as usize;
+        return Some(
+            (start..start + list.items.len())
+                .map(|value| format!("{}.", alpha_marker(value, false)))
+                .collect(),
+        );
+    }
+    if trimmed.len() == 1 && trimmed.chars().all(|c| c.is_ascii_uppercase()) {
+        let start = (trimmed.as_bytes()[0] - b'A' + 1) as usize;
+        return Some(
+            (start..start + list.items.len())
+                .map(|value| format!("{}.", alpha_marker(value, true)))
+                .collect(),
+        );
+    }
+    if trimmed.chars().all(|c| matches!(c, 'i' | 'v' | 'x' | 'l' | 'c' | 'd' | 'm')) {
+        let start = roman_to_number(trimmed)?;
+        return Some(
+            (start..start + list.items.len())
+                .map(|value| format!("{}.", number_to_roman(value, false)))
+                .collect(),
+        );
+    }
+    if trimmed
+        .chars()
+        .all(|c| matches!(c, 'I' | 'V' | 'X' | 'L' | 'C' | 'D' | 'M'))
+    {
+        let start = roman_to_number(trimmed)?;
+        return Some(
+            (start..start + list.items.len())
+                .map(|value| format!("{}.", number_to_roman(value, true)))
+                .collect(),
+        );
+    }
+
+    None
+}
+
+fn alpha_marker(mut value: usize, uppercase: bool) -> String {
+    let mut chars = Vec::new();
+    while value > 0 {
+        value -= 1;
+        let ch = (b'a' + (value % 26) as u8) as char;
+        chars.push(if uppercase { ch.to_ascii_uppercase() } else { ch });
+        value /= 26;
+    }
+    chars.iter().rev().collect()
+}
+
+fn roman_to_number(roman: &str) -> Option<usize> {
+    let mut total = 0usize;
+    let mut prev = 0usize;
+    for ch in roman.chars().rev() {
+        let value = match ch.to_ascii_uppercase() {
+            'I' => 1,
+            'V' => 5,
+            'X' => 10,
+            'L' => 50,
+            'C' => 100,
+            'D' => 500,
+            'M' => 1000,
+            _ => return None,
+        };
+        if value < prev {
+            total = total.checked_sub(value)?;
+        } else {
+            total += value;
+            prev = value;
+        }
+    }
+    Some(total)
+}
+
+fn number_to_roman(mut value: usize, uppercase: bool) -> String {
+    let mut output = String::new();
+    const NUMERALS: &[(usize, &str)] = &[
+        (1000, "M"),
+        (900, "CM"),
+        (500, "D"),
+        (400, "CD"),
+        (100, "C"),
+        (90, "XC"),
+        (50, "L"),
+        (40, "XL"),
+        (10, "X"),
+        (9, "IX"),
+        (5, "V"),
+        (4, "IV"),
+        (1, "I"),
+    ];
+    for (number, numeral) in NUMERALS {
+        while value >= *number {
+            value -= *number;
+            output.push_str(numeral);
+        }
+    }
+    if uppercase {
+        output
+    } else {
+        output.to_ascii_lowercase()
+    }
 }
 
 fn callout_list_to_events(
@@ -1139,6 +1293,34 @@ mod tests {
             events.first(),
             Some(Event::Start(Tag::List(Some(4))))
         ));
+    }
+
+    #[test]
+    fn alphabetic_ordered_lists_preserve_visible_markers() {
+        let events = parse_events("[loweralpha]\n. first\n. second\n");
+
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Text(text) if text.as_ref() == "a. "
+        )));
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Text(text) if text.as_ref() == "b. "
+        )));
+    }
+
+    #[test]
+    fn roman_ordered_lists_preserve_visible_markers() {
+        let events = parse_events("[upperroman]\n. first\n. second\n");
+
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Text(text) if text.as_ref() == "I. "
+        )));
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Text(text) if text.as_ref() == "II. "
+        )));
     }
 
     #[test]

@@ -1,0 +1,33 @@
+= Phase 5 Release Summary
+
+== Phase Objective
+
+Preserve non-numeric ordered-list styles in visible terminal output when AsciiDoc expresses those list types using style metadata such as `loweralpha` and `upperroman`.
+
+== Major Implementation Changes
+
+* Extended `src/asciidoc.rs` with style-aware ordered-list marker generation for `loweralpha`, `upperalpha`, `lowerroman`, and `upperroman`.
+* Added local helpers for alphabetic and Roman numeral marker generation.
+* Kept native numeric ordered lists on the existing `pulldown-cmark` list path while routing styled non-numeric lists through an explicit visible-marker rendering path.
+
+== Tests Added Or Updated
+
+* Added a regression test for `[loweralpha]` ordered lists.
+* Added a regression test for `[upperroman]` ordered lists.
+* Preserved the existing numeric ordered-list start test to prove both paths coexist.
+
+== Validation
+
+* `cargo test --workspace --locked`: passed
+* `cargo clippy --workspace --all-targets --locked`: passed
+* `cargo build --locked`: passed
+
+== Assumptions Made
+
+* In modern AsciiDoc, non-numeric ordered-list variants are expressed via list style metadata rather than literal `a.` or `I.` source markers, so the converter should key off `OrderedList.metadata.style`.
+* Visible marker preservation is more important here than forcing these styles back through a numeric-only list event abstraction.
+
+== Known Risks Or Follow-up Items
+
+* Styled ordered lists currently trade some generic list-structure semantics for visible marker fidelity.
+* Additional AsciiDoc list styles beyond the alpha/Roman families are still not specially rendered.
