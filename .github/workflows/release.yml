@@ -2,8 +2,7 @@ name: Release
 
 on:
   push:
-    branches: [main]
-    tags: ["xcat-v*"]
+    tags: ["*.*.*"]
 
 concurrency:
   group: release
@@ -13,29 +12,27 @@ permissions:
   contents: write
 
 jobs:
-  # On push to main: analyze conventional commits, bump version, create signed tag
-  release-plz:
-    name: "Semantic Release"
-    if: github.ref == 'refs/heads/main'
+  validate-tag:
+    name: "Validate Tag"
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Run release-plz
-        uses: MarcoIeni/release-plz-action@v0.5
-        with:
-          command: release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      - name: Validate semver tag
+        id: version
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/}"
+          if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Tag '${VERSION}' is not a supported semver release tag" >&2
+            exit 1
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
   # On tag push: build manpage artifact
   build-manpage:
     name: "Build Manpage"
-    if: startsWith(github.ref, 'refs/tags/xcat-v')
+    needs: validate-tag
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -51,8 +48,7 @@ jobs:
   # On tag push: build all targets, package tarballs + .deb/.rpm
   build:
     name: "Build (${{ matrix.target }})"
-    if: startsWith(github.ref, 'refs/tags/xcat-v')
-    needs: build-manpage
+    needs: [validate-tag, build-manpage]
     runs-on: ${{ matrix.os }}
     permissions:
       id-token: write
@@ -123,7 +119,7 @@ jobs:
       - name: Extract version from tag
         id: version
         shell: bash
-        run: echo "version=${GITHUB_REF#refs/tags/xcat-v}" >> "$GITHUB_OUTPUT"
+        run: echo "version=${{ needs.validate-tag.outputs.version }}" >> "$GITHUB_OUTPUT"
 
       - name: Package tarball / zip
         id: package
@@ -171,8 +167,7 @@ jobs:
   # On tag push: create GitHub release with all artifacts
   publish:
     name: "Publish Release"
-    if: startsWith(github.ref, 'refs/tags/xcat-v')
-    needs: build
+    needs: [validate-tag, build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -186,9 +181,10 @@ jobs:
       - name: Extract version from tag
         id: version
         shell: bash
-        run: echo "version=${GITHUB_REF#refs/tags/xcat-v}" >> "$GITHUB_OUTPUT"
+        run: echo "version=${{ needs.validate-tag.outputs.version }}" >> "$GITHUB_OUTPUT"
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.version.outputs.version }}
           name: "xcat ${{ steps.version.outputs.version }}"
           body_path: CHANGELOG.md
           files: "assets/*"
