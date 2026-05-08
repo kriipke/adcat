@@ -370,9 +370,11 @@ fn calculate_column_widths(table: &CurrentTable) -> Option<Vec<usize>> {
     for row in rows {
         let current = row.cells.as_slice().iter().map(|cell| {
             cell.fragments
-                .as_slice()
-                .iter()
-                .fold(0, |acc, x| acc + x.len())
+                .join("")
+                .lines()
+                .map(display_width)
+                .max()
+                .unwrap_or(0)
         });
         widths = zip(widths, current).map(|(a, b)| max(a, b)).collect();
     }
@@ -390,13 +392,21 @@ fn write_table_rule<W: Write>(
     writeln!(writer)
 }
 
-fn format_table_cell(cell: TableCell, width: usize, alignment: Alignment) -> String {
+fn format_table_cell_line(content: &str, width: usize, alignment: Alignment) -> String {
     use Alignment::*;
-    let content = cell.fragments.join("");
     match alignment {
         Left | None => format!(" {:<width$} ", content),
         Center => format!(" {:^width$} ", content),
         Right => format!(" {:>width$} ", content),
+    }
+}
+
+fn table_cell_lines(cell: &TableCell) -> Vec<String> {
+    let joined = cell.fragments.join("");
+    if joined.is_empty() {
+        vec![String::new()]
+    } else {
+        joined.lines().map(ToOwned::to_owned).collect()
     }
 }
 
@@ -420,32 +430,83 @@ pub fn write_table<W: Write>(
 
         // Write the table head in bold if any.
         if let Some(head) = table.head {
-            for ((cell, &width), &alignment) in zip(zip(head.cells, &widths), &table.alignments) {
-                write_styled(
-                    writer,
-                    capabilities,
-                    &Style::new().bold(),
-                    format_table_cell(cell, width, alignment),
-                )?;
+            let lines = head
+                .cells
+                .iter()
+                .map(table_cell_lines)
+                .collect::<Vec<_>>();
+            let row_height = lines.iter().map(Vec::len).max().unwrap_or(1);
+            for line_index in 0..row_height {
+                for (((cell_lines, &width), &alignment), _cell) in zip(
+                    zip(zip(lines.iter(), &widths), &table.alignments),
+                    &head.cells,
+                ) {
+                    let content = cell_lines.get(line_index).map_or("", String::as_str);
+                    write_styled(
+                        writer,
+                        capabilities,
+                        &Style::new().bold(),
+                        format_table_cell_line(content, width, alignment),
+                    )?;
+                }
+                writeln!(writer)?;
             }
-            writeln!(writer)?;
             write_table_rule(writer, capabilities, rule_length)?;
         }
 
         // Write table body.
         for row in table.rows {
-            for ((cell, &width), &alignment) in zip(zip(row.cells, &widths), &table.alignments) {
-                write_styled(
-                    writer,
-                    capabilities,
-                    &Style::new(),
-                    format_table_cell(cell, width, alignment),
-                )?;
+            let lines = row.cells.iter().map(table_cell_lines).collect::<Vec<_>>();
+            let row_height = lines.iter().map(Vec::len).max().unwrap_or(1);
+            for line_index in 0..row_height {
+                for (((cell_lines, &width), &alignment), _cell) in zip(
+                    zip(zip(lines.iter(), &widths), &table.alignments),
+                    &row.cells,
+                ) {
+                    let content = cell_lines.get(line_index).map_or("", String::as_str);
+                    write_styled(
+                        writer,
+                        capabilities,
+                        &Style::new(),
+                        format_table_cell_line(content, width, alignment),
+                    )?;
+                }
+                writeln!(writer)?;
             }
-            writeln!(writer)?;
         }
         write_table_rule(writer, capabilities, rule_length)?;
     }
     // Do nothing when there are no rows in the table, which should be impossible.
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn table_cell_lines_preserves_multiline_content() {
+        let cell = TableCell {
+            fragments: vec!["alpha\nbeta".into()],
+        };
+
+        assert_eq!(table_cell_lines(&cell), vec!["alpha".to_string(), "beta".to_string()]);
+    }
+
+    #[test]
+    fn calculate_column_widths_uses_longest_line_per_cell() {
+        let table = CurrentTable {
+            head: None,
+            rows: vec![crate::render::data::TableRow {
+                cells: vec![TableCell {
+                    fragments: vec!["a\nlonger".into()],
+                }],
+                current_cell: TableCell::empty(),
+            }],
+            current_row: crate::render::data::TableRow::empty(),
+            alignments: vec![Alignment::Left],
+        };
+
+        assert_eq!(calculate_column_widths(&table), Some(vec![6]));
+    }
 }

@@ -7,10 +7,10 @@
 //! Convert AsciiDoc AST to pulldown-cmark events.
 
 use acdc_parser::{
-    Block, DelimitedBlockType, Document, Footnote, InlineMacro, InlineNode, ListItem,
-    OrderedList, Paragraph, Section, UnorderedList,
+    Block, CalloutList, DelimitedBlockType, DescriptionList, Document, Footnote, InlineMacro,
+    InlineNode, ListItem, OrderedList, Paragraph, Section, UnorderedList,
 };
-use pulldown_cmark::{CowStr, Event, HeadingLevel, LinkType, Tag, TagEnd};
+use pulldown_cmark::{Alignment, CowStr, Event, HeadingLevel, LinkType, Tag, TagEnd};
 
 /// Convert an AsciiDoc document to pulldown-cmark events.
 pub fn document_to_events(doc: &Document) -> Vec<Event<'static>> {
@@ -79,6 +79,26 @@ fn footnote_definition_to_events(footnote: &Footnote) -> Vec<Event<'static>> {
     events
 }
 
+fn link_with_inline_text_events(
+    link_type: LinkType,
+    dest_url: CowStr<'static>,
+    text: &[InlineNode],
+) -> Vec<Event<'static>> {
+    let mut events = vec![Event::Start(Tag::Link {
+        link_type,
+        dest_url: dest_url.clone(),
+        title: CowStr::from(""),
+        id: CowStr::from(""),
+    })];
+    if text.is_empty() {
+        events.push(Event::Text(dest_url));
+    } else {
+        events.extend(inlines_to_events(text));
+    }
+    events.push(Event::End(TagEnd::Link));
+    events
+}
+
 fn title_to_events(title: &acdc_parser::Title, level: HeadingLevel) -> Vec<Event<'static>> {
     let mut events = Vec::new();
     events.push(Event::Start(Tag::Heading {
@@ -110,30 +130,30 @@ fn block_to_events(block: &Block) -> Vec<Event<'static>> {
         Block::Section(section) => section_to_events(section),
         Block::UnorderedList(list) => unordered_list_to_events(list),
         Block::OrderedList(list) => ordered_list_to_events(list),
+        Block::CalloutList(list) => callout_list_to_events(list),
+        Block::DescriptionList(list) => description_list_to_events(list),
         Block::DelimitedBlock(delimited) => delimited_block_to_events(delimited),
         Block::ThematicBreak(_) => vec![Event::Rule],
+        Block::PageBreak(_) => vec![Event::Rule],
         Block::DiscreteHeader(header) => {
             let level = heading_level(header.level);
             title_to_events(&header.title, level)
         }
         Block::Image(img) => {
             let dest = source_to_cowstr(&img.source);
-            let alt = if img.title.is_empty() {
-                CowStr::from("")
-            } else {
-                inlines_to_string(img.title.as_ref())
-            };
-            vec![
+            let mut events = vec![
                 Event::Start(Tag::Paragraph),
                 Event::Start(Tag::Image {
                     link_type: LinkType::Inline,
                     dest_url: dest,
-                    title: alt.clone(),
+                    title: CowStr::from(""),
                     id: CowStr::from(""),
                 }),
-                Event::End(TagEnd::Image),
-                Event::End(TagEnd::Paragraph),
-            ]
+            ];
+            events.extend(inlines_to_events(img.title.as_ref()));
+            events.push(Event::End(TagEnd::Image));
+            events.push(Event::End(TagEnd::Paragraph));
+            events
         }
         Block::Admonition(admon) => {
             let label: &str = match admon.variant {
@@ -152,8 +172,350 @@ fn block_to_events(block: &Block) -> Vec<Event<'static>> {
             events
         }
         Block::Comment(_) => vec![],
+        Block::DocumentAttribute(_) | Block::TableOfContents(_) => vec![],
+        Block::Audio(audio) => media_block_to_events("Audio", &audio.source),
+        Block::Video(video) => video_block_to_events(video),
         _ => unsupported_block_events("block"),
     }
+}
+
+fn media_block_to_events(label: &str, source: &acdc_parser::Source) -> Vec<Event<'static>> {
+    vec![
+        Event::Start(Tag::Paragraph),
+        Event::Text(format!("{label}: ").into()),
+        Event::Start(Tag::Link {
+            link_type: LinkType::Inline,
+            dest_url: source.to_string().into(),
+            title: CowStr::from(""),
+            id: CowStr::from(""),
+        }),
+        Event::Text(source.to_string().into()),
+        Event::End(TagEnd::Link),
+        Event::End(TagEnd::Paragraph),
+    ]
+}
+
+fn video_block_to_events(video: &acdc_parser::Video) -> Vec<Event<'static>> {
+    let mut events = Vec::new();
+    for source in &video.sources {
+        events.extend(media_block_to_events("Video", source));
+    }
+    events
+}
+
+fn table_alignment(
+    table: &acdc_parser::Table,
+    column_index: usize,
+    cell: &acdc_parser::TableColumn,
+) -> Alignment {
+    let halign = cell
+        .halign
+        .or_else(|| table.columns.get(column_index).map(|column| column.halign));
+    match halign.unwrap_or(acdc_parser::HorizontalAlignment::Left) {
+        acdc_parser::HorizontalAlignment::Left => Alignment::Left,
+        acdc_parser::HorizontalAlignment::Center => Alignment::Center,
+        acdc_parser::HorizontalAlignment::Right => Alignment::Right,
+    }
+}
+
+#[derive(Clone, Debug)]
+struct ExpandedTableCell {
+    text: String,
+    alignment: Alignment,
+}
+
+#[derive(Clone, Debug)]
+struct PendingRowSpan {
+    remaining_rows: usize,
+    alignment: Alignment,
+}
+
+fn consume_pending_rowspans(
+    pending_rowspans: &mut [Option<PendingRowSpan>],
+    expanded: &mut Vec<ExpandedTableCell>,
+    column_index: &mut usize,
+) {
+    while pending_rowspans
+        .get(*column_index)
+        .and_then(|span| span.as_ref())
+        .is_some()
+    {
+        let span = pending_rowspans[*column_index]
+            .as_mut()
+            .expect("checked is_some");
+        expanded.push(ExpandedTableCell {
+            text: String::new(),
+            alignment: span.alignment,
+        });
+        span.remaining_rows = span.remaining_rows.saturating_sub(1);
+        if span.remaining_rows == 0 {
+            pending_rowspans[*column_index] = None;
+        }
+        *column_index += 1;
+    }
+}
+
+fn push_table_part(parts: &mut Vec<String>, text: String) {
+    if !text.is_empty() {
+        parts.push(text);
+    }
+}
+
+fn table_prefixed_lines(prefix: &str, text: &str) -> String {
+    text.lines()
+        .map(|line| format!("{prefix}{line}"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn admonition_label(variant: &acdc_parser::AdmonitionVariant) -> &'static str {
+    match variant {
+        acdc_parser::AdmonitionVariant::Note => "NOTE",
+        acdc_parser::AdmonitionVariant::Tip => "TIP",
+        acdc_parser::AdmonitionVariant::Important => "IMPORTANT",
+        acdc_parser::AdmonitionVariant::Caution => "CAUTION",
+        acdc_parser::AdmonitionVariant::Warning => "WARNING",
+    }
+}
+
+fn expand_table_row(
+    row: &acdc_parser::TableRow,
+    table: &acdc_parser::Table,
+    pending_rowspans: &mut Vec<Option<PendingRowSpan>>,
+) -> Vec<ExpandedTableCell> {
+    let mut expanded = Vec::new();
+    let mut column_index = 0usize;
+
+    for cell in &row.columns {
+        consume_pending_rowspans(pending_rowspans.as_mut_slice(), &mut expanded, &mut column_index);
+
+        let alignment = table_alignment(table, column_index, cell);
+        let colspan = cell.colspan.max(1);
+        let rowspan = cell.rowspan.max(1);
+
+        expanded.push(ExpandedTableCell {
+            text: table_cell_text(&cell.content),
+            alignment,
+        });
+        if pending_rowspans.len() <= column_index {
+            pending_rowspans.resize(column_index + 1, None);
+        }
+        if rowspan > 1 {
+            pending_rowspans[column_index] = Some(PendingRowSpan {
+                remaining_rows: rowspan - 1,
+                alignment,
+            });
+        }
+        column_index += 1;
+
+        for _ in 1..colspan {
+            expanded.push(ExpandedTableCell {
+                text: String::new(),
+                alignment,
+            });
+            if pending_rowspans.len() <= column_index {
+                pending_rowspans.resize(column_index + 1, None);
+            }
+            if rowspan > 1 {
+                pending_rowspans[column_index] = Some(PendingRowSpan {
+                    remaining_rows: rowspan - 1,
+                    alignment,
+                });
+            }
+            column_index += 1;
+        }
+    }
+
+    consume_pending_rowspans(pending_rowspans.as_mut_slice(), &mut expanded, &mut column_index);
+    expanded
+}
+
+fn table_cell_text(blocks: &[Block]) -> String {
+    let mut parts = Vec::new();
+    for block in blocks {
+        match block {
+            Block::Paragraph(paragraph) => {
+                push_table_part(&mut parts, inlines_to_string(&paragraph.content).into_string());
+            }
+            Block::Image(image) => {
+                push_table_part(&mut parts, inlines_to_string(image.title.as_ref()).into_string());
+            }
+            Block::UnorderedList(list) => {
+                for item in &list.items {
+                    let principal = inlines_to_string(&item.principal).into_string();
+                    if !principal.is_empty() {
+                        push_table_part(&mut parts, format!("* {principal}"));
+                    }
+                    let nested = table_cell_text(&item.blocks);
+                    if !nested.is_empty() {
+                        push_table_part(&mut parts, table_prefixed_lines("  ", &nested));
+                    }
+                }
+            }
+            Block::OrderedList(list) => {
+                let start = list
+                    .marker
+                    .chars()
+                    .take_while(|c| c.is_ascii_digit())
+                    .collect::<String>()
+                    .parse::<usize>()
+                    .ok()
+                    .filter(|start| *start > 0)
+                    .unwrap_or(1);
+                for (offset, item) in list.items.iter().enumerate() {
+                    let principal = inlines_to_string(&item.principal).into_string();
+                    if !principal.is_empty() {
+                        push_table_part(&mut parts, format!("{}. {principal}", start + offset));
+                    }
+                    let nested = table_cell_text(&item.blocks);
+                    if !nested.is_empty() {
+                        push_table_part(&mut parts, table_prefixed_lines("  ", &nested));
+                    }
+                }
+            }
+            Block::DescriptionList(list) => {
+                for item in &list.items {
+                    let mut part = inlines_to_string(&item.term).into_string();
+                    if !item.principal_text.is_empty() {
+                        if !part.is_empty() {
+                            part.push_str(": ");
+                        }
+                        part.push_str(&inlines_to_string(&item.principal_text));
+                    }
+                    push_table_part(&mut parts, part);
+                    let nested = table_cell_text(&item.description);
+                    if !nested.is_empty() {
+                        push_table_part(&mut parts, table_prefixed_lines("  ", &nested));
+                    }
+                }
+            }
+            Block::CalloutList(list) => {
+                for item in &list.items {
+                    let principal = inlines_to_string(&item.principal).into_string();
+                    if !principal.is_empty() {
+                        push_table_part(&mut parts, format!("<{}> {principal}", item.callout.number));
+                    }
+                    let nested = table_cell_text(&item.blocks);
+                    if !nested.is_empty() {
+                        push_table_part(&mut parts, table_prefixed_lines("  ", &nested));
+                    }
+                }
+            }
+            Block::DelimitedBlock(delimited) => match &delimited.inner {
+                DelimitedBlockType::DelimitedListing(inlines)
+                | DelimitedBlockType::DelimitedLiteral(inlines)
+                | DelimitedBlockType::DelimitedPass(inlines)
+                | DelimitedBlockType::DelimitedVerse(inlines) => {
+                    push_table_part(&mut parts, inlines_to_string(inlines).into_string());
+                }
+                DelimitedBlockType::DelimitedStem(stem) => {
+                    push_table_part(&mut parts, stem.content.to_string());
+                }
+                DelimitedBlockType::DelimitedTable(inner_table) => {
+                    let mut nested_rows = Vec::new();
+                    if let Some(header) = &inner_table.header {
+                        nested_rows.push(
+                            header
+                                .columns
+                                .iter()
+                                .map(|column| table_cell_text(&column.content))
+                                .collect::<Vec<_>>()
+                                .join(" | "),
+                        );
+                    }
+                    for row in &inner_table.rows {
+                        nested_rows.push(
+                            row.columns
+                                .iter()
+                                .map(|column| table_cell_text(&column.content))
+                                .collect::<Vec<_>>()
+                                .join(" | "),
+                        );
+                    }
+                    push_table_part(&mut parts, nested_rows.join("\n"));
+                }
+                DelimitedBlockType::DelimitedExample(blocks)
+                | DelimitedBlockType::DelimitedOpen(blocks)
+                | DelimitedBlockType::DelimitedSidebar(blocks)
+                | DelimitedBlockType::DelimitedQuote(blocks) => {
+                    let nested = table_cell_text(blocks);
+                    push_table_part(&mut parts, nested);
+                }
+                DelimitedBlockType::DelimitedComment(_) => {}
+                _ => {}
+            },
+            Block::Admonition(admonition) => {
+                let nested = table_cell_text(&admonition.blocks);
+                if nested.is_empty() {
+                    push_table_part(
+                        &mut parts,
+                        format!("{}:", admonition_label(&admonition.variant)),
+                    );
+                } else {
+                    push_table_part(
+                        &mut parts,
+                        format!(
+                            "{}: {}",
+                            admonition_label(&admonition.variant),
+                            nested.replace('\n', " ")
+                        ),
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+    parts.join("\n")
+}
+
+fn table_row_to_events(row: &[ExpandedTableCell]) -> Vec<Event<'static>> {
+    let mut events = vec![Event::Start(Tag::TableRow)];
+    for column in row {
+        events.push(Event::Start(Tag::TableCell));
+        events.push(Event::Text(column.text.clone().into()));
+        events.push(Event::End(TagEnd::TableCell));
+    }
+    events.push(Event::End(TagEnd::TableRow));
+    events
+}
+
+fn table_to_events(table: &acdc_parser::Table) -> Vec<Event<'static>> {
+    let mut pending_rowspans = Vec::new();
+    let expanded_header = table
+        .header
+        .as_ref()
+        .map(|row| expand_table_row(row, table, &mut pending_rowspans));
+    let expanded_rows = table
+        .rows
+        .iter()
+        .map(|row| expand_table_row(row, table, &mut pending_rowspans))
+        .collect::<Vec<_>>();
+    let expanded_footer = table
+        .footer
+        .as_ref()
+        .map(|row| expand_table_row(row, table, &mut pending_rowspans));
+
+    let alignments = expanded_header
+        .as_ref()
+        .or_else(|| expanded_rows.first())
+        .or(expanded_footer.as_ref())
+        .map(|row| row.iter().map(|cell| cell.alignment).collect())
+        .unwrap_or_default();
+
+    let mut events = vec![Event::Start(Tag::Table(alignments))];
+    if let Some(header) = &expanded_header {
+        events.push(Event::Start(Tag::TableHead));
+        events.extend(table_row_to_events(header));
+        events.push(Event::End(TagEnd::TableHead));
+    }
+    for row in &expanded_rows {
+        events.extend(table_row_to_events(row));
+    }
+    if let Some(footer) = &expanded_footer {
+        events.extend(table_row_to_events(footer));
+    }
+    events.push(Event::End(TagEnd::Table));
+    events
 }
 
 fn paragraph_to_events(para: &Paragraph) -> Vec<Event<'static>> {
@@ -197,6 +559,37 @@ fn ordered_list_to_events(list: &OrderedList) -> Vec<Event<'static>> {
         events.extend(list_item_to_events(item));
     }
     events.push(Event::End(TagEnd::List(true)));
+    events
+}
+
+fn callout_list_to_events(list: &CalloutList) -> Vec<Event<'static>> {
+    let start = list.items.first().map(|item| item.callout.number as u64);
+    let mut events = vec![Event::Start(Tag::List(start))];
+    for item in &list.items {
+        let mut item_events = vec![Event::Start(Tag::Item)];
+        item_events.extend(inlines_to_events(&item.principal));
+        for block in &item.blocks {
+            item_events.extend(block_to_events(block));
+        }
+        item_events.push(Event::End(TagEnd::Item));
+        events.extend(item_events);
+    }
+    events.push(Event::End(TagEnd::List(true)));
+    events
+}
+
+fn description_list_to_events(list: &DescriptionList) -> Vec<Event<'static>> {
+    let mut events = Vec::new();
+    for item in &list.items {
+        events.push(Event::Start(Tag::Paragraph));
+        events.extend(inlines_to_events(&item.term));
+        events.push(Event::Text(": ".into()));
+        events.extend(inlines_to_events(&item.principal_text));
+        events.push(Event::End(TagEnd::Paragraph));
+        for block in &item.description {
+            events.extend(block_to_events(block));
+        }
+    }
     events
 }
 
@@ -259,7 +652,7 @@ fn delimited_block_to_events(block: &acdc_parser::DelimitedBlock) -> Vec<Event<'
                 Event::End(TagEnd::CodeBlock),
             ]
         }
-        DelimitedBlockType::DelimitedTable(_) => unsupported_block_events("table"),
+        DelimitedBlockType::DelimitedTable(table) => table_to_events(table),
         DelimitedBlockType::DelimitedComment(_) | _ => vec![],
     }
 }
@@ -322,8 +715,11 @@ fn inline_to_events(inline: &InlineNode) -> Vec<Event<'static>> {
             events.push(Event::Text(CowStr::from("\u{201d}")));
             events
         }
-        InlineNode::CurvedApostropheText(_) => {
-            vec![Event::Text(CowStr::from("\u{2019}"))]
+        InlineNode::CurvedApostropheText(quote) => {
+            let mut events = vec![Event::Text(CowStr::from("\u{2018}"))];
+            events.extend(inlines_to_events(&quote.content));
+            events.push(Event::Text(CowStr::from("\u{2019}")));
+            events
         }
         InlineNode::StandaloneCurvedApostrophe(_) => {
             vec![Event::Text(CowStr::from("\u{2019}"))]
@@ -347,39 +743,11 @@ fn macro_to_events(macro_node: &InlineMacro) -> Vec<Event<'static>> {
     match macro_node {
         InlineMacro::Link(link) => {
             let dest = source_to_cowstr(&link.target);
-            let text = if link.text.is_empty() {
-                source_to_cowstr(&link.target)
-            } else {
-                inlines_to_string(&link.text)
-            };
-            vec![
-                Event::Start(Tag::Link {
-                    link_type: LinkType::Inline,
-                    dest_url: dest,
-                    title: CowStr::from(""),
-                    id: CowStr::from(""),
-                }),
-                Event::Text(text),
-                Event::End(TagEnd::Link),
-            ]
+            link_with_inline_text_events(LinkType::Inline, dest, &link.text)
         }
         InlineMacro::Url(url) => {
             let dest = source_to_cowstr(&url.target);
-            let text = if url.text.is_empty() {
-                source_to_cowstr(&url.target)
-            } else {
-                inlines_to_string(&url.text)
-            };
-            vec![
-                Event::Start(Tag::Link {
-                    link_type: LinkType::Inline,
-                    dest_url: dest,
-                    title: CowStr::from(""),
-                    id: CowStr::from(""),
-                }),
-                Event::Text(text),
-                Event::End(TagEnd::Link),
-            ]
+            link_with_inline_text_events(LinkType::Inline, dest, &url.text)
         }
         InlineMacro::Autolink(autolink) => {
             let dest = source_to_cowstr(&autolink.url);
@@ -396,58 +764,29 @@ fn macro_to_events(macro_node: &InlineMacro) -> Vec<Event<'static>> {
         }
         InlineMacro::Image(img) => {
             let dest = source_to_cowstr(&img.source);
-            let alt = if img.title.is_empty() {
-                CowStr::from("")
-            } else {
-                inlines_to_string(img.title.as_ref())
-            };
-            vec![
-                Event::Start(Tag::Image {
-                    link_type: LinkType::Inline,
-                    dest_url: dest,
-                    title: alt,
-                    id: CowStr::from(""),
-                }),
-                Event::End(TagEnd::Image),
-            ]
+            let mut events = vec![Event::Start(Tag::Image {
+                link_type: LinkType::Inline,
+                dest_url: dest,
+                title: CowStr::from(""),
+                id: CowStr::from(""),
+            })];
+            events.extend(inlines_to_events(img.title.as_ref()));
+            events.push(Event::End(TagEnd::Image));
+            events
         }
         InlineMacro::Footnote(footnote) => {
             vec![Event::FootnoteReference(footnote_label(footnote))]
         }
         InlineMacro::Mailto(mailto) => {
             let dest = source_to_cowstr(&mailto.target);
-            let text = if mailto.text.is_empty() {
-                source_to_cowstr(&mailto.target)
-            } else {
-                inlines_to_string(&mailto.text)
-            };
-            vec![
-                Event::Start(Tag::Link {
-                    link_type: LinkType::Email,
-                    dest_url: dest,
-                    title: CowStr::from(""),
-                    id: CowStr::from(""),
-                }),
-                Event::Text(text),
-                Event::End(TagEnd::Link),
-            ]
+            link_with_inline_text_events(LinkType::Email, dest, &mailto.text)
         }
         InlineMacro::CrossReference(xref) => {
-            let text = if xref.text.is_empty() {
-                xref.target.to_string().into()
-            } else {
-                inlines_to_string(xref.text.as_ref())
-            };
-            vec![
-                Event::Start(Tag::Link {
-                    link_type: LinkType::Inline,
-                    dest_url: format!("#{}", xref.target).into(),
-                    title: CowStr::from(""),
-                    id: CowStr::from(""),
-                }),
-                Event::Text(text),
-                Event::End(TagEnd::Link),
-            ]
+            link_with_inline_text_events(
+                LinkType::Inline,
+                format!("#{}", xref.target).into(),
+                xref.text.as_ref(),
+            )
         }
         InlineMacro::Pass(pass) => vec![Event::Text(pass.text.unwrap_or("").to_string().into())],
         InlineMacro::Button(button) => vec![Event::Code(button.label.to_string().into())],
@@ -498,7 +837,29 @@ fn inlines_to_string(inlines: &[InlineNode]) -> CowStr<'static> {
             InlineNode::MonospaceText(m) => {
                 result.push_str(&inlines_to_string(&m.content));
             }
+            InlineNode::HighlightText(h) => {
+                result.push_str(&inlines_to_string(&h.content));
+            }
+            InlineNode::SubscriptText(s) => {
+                result.push_str(&inlines_to_string(&s.content));
+            }
+            InlineNode::SuperscriptText(s) => {
+                result.push_str(&inlines_to_string(&s.content));
+            }
+            InlineNode::CurvedQuotationText(q) => {
+                result.push('\u{201c}');
+                result.push_str(&inlines_to_string(&q.content));
+                result.push('\u{201d}');
+            }
+            InlineNode::CurvedApostropheText(a) => {
+                result.push('\u{2018}');
+                result.push_str(&inlines_to_string(&a.content));
+                result.push('\u{2019}');
+            }
+            InlineNode::StandaloneCurvedApostrophe(_) => result.push('\u{2019}'),
             InlineNode::LineBreak(_) => result.push('\n'),
+            InlineNode::InlineAnchor(_) => {}
+            InlineNode::CalloutRef(callout) => result.push_str(&format!("<{}>", callout.number)),
             InlineNode::Macro(m) => {
                 result.push_str(&macro_to_string(m));
             }
@@ -534,6 +895,26 @@ fn macro_to_string(m: &InlineMacro) -> String {
             } else {
                 let id = f.id.unwrap_or("");
                 format!("[{}]", id)
+            }
+        }
+        InlineMacro::Pass(pass) => pass.text.unwrap_or("").to_string(),
+        InlineMacro::Button(button) => button.label.to_string(),
+        InlineMacro::Keyboard(keyboard) => keyboard.keys.join("+"),
+        InlineMacro::Menu(menu) => {
+            let mut path = String::from(menu.target);
+            if !menu.items.is_empty() {
+                path.push_str(" > ");
+                path.push_str(&menu.items.join(" > "));
+            }
+            path
+        }
+        InlineMacro::Stem(stem) => stem.content.to_string(),
+        InlineMacro::Icon(icon) => icon.target.to_string(),
+        InlineMacro::IndexTerm(index_term) => {
+            if matches!(&index_term.kind, acdc_parser::IndexTermKind::Flow(_)) {
+                index_term.term().to_string()
+            } else {
+                String::new()
             }
         }
         InlineMacro::Mailto(mt) => {
@@ -665,6 +1046,166 @@ mod tests {
         assert!(events.iter().any(|event| matches!(
             event,
             Event::Text(text) if text.as_ref().contains("Roses are red")
+        )));
+    }
+
+    #[test]
+    fn formatted_link_text_is_preserved_inside_link_events() {
+        let events = parse_events("link:https://example.com[*bold* text]\n");
+
+        let link_start = events
+            .iter()
+            .position(|event| matches!(event, Event::Start(Tag::Link { .. })))
+            .expect("expected link start");
+        let strong_start = events
+            .iter()
+            .position(|event| matches!(event, Event::Start(Tag::Strong)))
+            .expect("expected strong start");
+        let link_end = events
+            .iter()
+            .position(|event| matches!(event, Event::End(TagEnd::Link)))
+            .expect("expected link end");
+
+        assert!(link_start < strong_start);
+        assert!(strong_start < link_end);
+    }
+
+    #[test]
+    fn curved_apostrophe_text_preserves_inner_content() {
+        let events = parse_events("'`quoted`'\n");
+
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Text(text) if text.as_ref() == "\u{2018}"
+        )));
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Text(text) if text.as_ref() == "quoted"
+        )));
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Text(text) if text.as_ref() == "\u{2019}"
+        )));
+    }
+
+    #[test]
+    fn description_lists_are_no_longer_unsupported_blocks() {
+        let events = parse_events("term:: explanation\n");
+
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Text(text) if text.as_ref() == "term"
+        )));
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Text(text) if text.as_ref() == ": "
+        )));
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Text(text) if text.as_ref() == "explanation"
+        )));
+        assert!(!events.iter().any(|event| matches!(
+            event,
+            Event::Text(text) if text.as_ref().contains("[unsupported")
+        )));
+    }
+
+    #[test]
+    fn callout_lists_are_rendered_as_lists() {
+        let events = parse_events(
+            "[source]\n----\nlet x = 1; <1>\n----\n<1> first callout\n",
+        );
+
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Start(Tag::List(Some(1)))
+        )));
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Text(text) if text.as_ref() == "first callout"
+        )));
+    }
+
+    #[test]
+    fn simple_tables_are_rendered_as_table_events() {
+        let events = parse_events("|===\n| A | B\n| C | D\n|===\n");
+
+        assert!(events.iter().any(|event| matches!(event, Event::Start(Tag::Table(_)))));
+        assert!(events.iter().any(|event| matches!(event, Event::Start(Tag::TableRow))));
+        assert!(events.iter().any(|event| matches!(event, Event::Start(Tag::TableCell))));
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Text(text) if text.as_ref() == "A"
+        )));
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Text(text) if text.as_ref() == "D"
+        )));
+    }
+
+    #[test]
+    fn header_tables_emit_table_head() {
+        let events = parse_events("[options=\"header\"]\n|===\n| Name | Age\n| Ada | 42\n|===\n");
+
+        assert!(events.iter().any(|event| matches!(event, Event::Start(Tag::TableHead))));
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Text(text) if text.as_ref() == "Name"
+        )));
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Text(text) if text.as_ref() == "42"
+        )));
+    }
+
+    #[test]
+    fn asciidoc_style_table_cells_preserve_list_structure_in_text() {
+        let events = parse_events("[cols=\"1a\"]\n|===\na|\n* one\n* two\n|===\n");
+
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Text(text) if text.as_ref().contains("* one")
+        )));
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Text(text) if text.as_ref().contains("* two")
+        )));
+    }
+
+    #[test]
+    fn table_cells_preserve_admonition_labels() {
+        let events = parse_events("[cols=\"1a\"]\n|===\na|\nNOTE: inside\n|===\n");
+
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Text(text) if text.as_ref().contains("NOTE:")
+        )));
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Text(text) if text.as_ref().contains("inside")
+        )));
+    }
+
+    #[test]
+    fn table_spans_expand_to_rectangular_grid() {
+        let events = parse_events("|===\n2+| wide | tail\n| next\n|===\n");
+
+        let cells = events
+            .iter()
+            .filter(|event| matches!(event, Event::Start(Tag::TableCell)))
+            .count();
+        assert_eq!(cells, 4);
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Text(text) if text.as_ref() == "wide"
+        )));
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Text(text) if text.as_ref() == "tail"
+        )));
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Text(text) if text.as_ref() == "next"
         )));
     }
 }
