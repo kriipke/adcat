@@ -57,7 +57,8 @@ Not supported:
 
 * CommonMark extension for footnotes.
 * Inline markup and text wrapping in table cells.
-* AsciiDoc tables, include directives, and conditional preprocessing.
+* Inline markup and text wrapping in CommonMark table cells.
+* Some advanced AsciiDoc processor semantics are still rendered approximately.
 
 [syntect]: https://github.com/trishume/syntect
 [osc8]: https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda

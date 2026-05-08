@@ -1,0 +1,34 @@
+= Phase 1 Release Summary
+
+== Phase Objective
+
+Enable AsciiDoc preprocessing in `xcat` so file-based documents can use `include::` directives and conditional directives such as `ifdef`, `ifndef`, and `ifeval`.
+
+== Major Implementation Changes
+
+* Switched file-backed AsciiDoc processing from `acdc_parser::parse` to `acdc_parser::parse_file` in `src/lib.rs`.
+* Preserved standard-input handling by continuing to parse stdin buffers directly when no source file path exists.
+* Kept the existing render pipeline intact after preprocessing by converting the parsed AsciiDoc document into `pulldown-cmark` events as before.
+* Updated the README support statement to reflect that include directives and conditional preprocessing are no longer categorically unsupported.
+
+== Tests Added Or Updated
+
+* Added CLI regression coverage for file-based AsciiDoc includes.
+* Added CLI regression coverage for `ifdef`, `ifndef`, and `ifeval` preprocessing.
+
+== Validation
+
+* `cargo test --workspace --locked`: passed
+* `cargo clippy --workspace --all-targets --locked`: passed
+* `cargo build --locked`: passed
+
+== Assumptions Made
+
+* File-backed AsciiDoc documents should use the parser's built-in preprocessing pipeline rather than a separate `xcat`-local preprocessor.
+* Standard input should continue to skip file-relative include resolution because there is no stable source path to anchor relative includes.
+
+== Known Risks Or Follow-up Items
+
+* Standard-input AsciiDoc still cannot support relative `include::` resolution.
+* Parser warnings from preprocessing are not yet surfaced to end users.
+* Safe-mode and attribute overrides are still fixed at parser defaults; there is no CLI for tuning AsciiDoc processor options yet.

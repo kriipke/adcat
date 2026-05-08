@@ -75,44 +75,79 @@ pub fn process_file(
     resource_handler: &dyn ResourceUrlHandler,
     output: &mut Output,
 ) -> Result<()> {
-    let (base_dir, input) = read_input(filename)?;
-    event!(
-        Level::TRACE,
-        "Read input, using {} as base directory",
-        base_dir.display()
-    );
-
     let is_asciidoc = filename.ends_with(".adoc") || filename.ends_with(".asciidoc");
-    let env = Environment::for_local_directory(&base_dir)?;
-    let mut sink = BufWriter::new(output.writer());
-
-    if is_asciidoc {
+    let result = if is_asciidoc {
         event!(Level::DEBUG, "Processing AsciiDoc file: {}", filename);
-        let parse_result = acdc_parser::parse(&input, &acdc_parser::Options::default())
-            .with_context(|| format!("Failed to parse AsciiDoc file: {}", filename))?;
+        let (base_dir, parse_result) = if filename == "-" {
+            let (base_dir, input) = read_input(filename)?;
+            event!(
+                Level::TRACE,
+                "Read stdin input, using {} as base directory",
+                base_dir.display()
+            );
+            let parse_result = acdc_parser::parse(&input, &acdc_parser::Options::default())
+                .with_context(|| "Failed to parse AsciiDoc from standard input".to_string())?;
+            (base_dir, parse_result)
+        } else {
+            let path = PathBuf::from(filename);
+            let current_dir = std::env::current_dir()?;
+            let base_dir = current_dir
+                .join(&path)
+                .parent()
+                .map(|p| p.to_path_buf())
+                .unwrap_or(current_dir);
+            event!(
+                Level::TRACE,
+                "Reading AsciiDoc file with preprocessing, using {} as base directory",
+                base_dir.display()
+            );
+            let parse_result = acdc_parser::parse_file(&path, &acdc_parser::Options::default())
+                .with_context(|| format!("Failed to parse AsciiDoc file: {}", filename))?;
+            (base_dir, parse_result)
+        };
+        let env = Environment::for_local_directory(&base_dir)?;
+        let mut sink = BufWriter::new(output.writer());
         let events = asciidoc::document_to_events(parse_result.document());
-        pulldown_cmark_mdcat::push_tty(settings, &env, resource_handler, &mut sink, events.into_iter())
+        pulldown_cmark_mdcat::push_tty(
+            settings,
+            &env,
+            resource_handler,
+            &mut sink,
+            events.into_iter(),
+        )
+        .and_then(|_| {
+            event!(Level::TRACE, "Finished rendering, flushing output");
+            sink.flush()
+        })
     } else {
+        let (base_dir, input) = read_input(filename)?;
+        event!(
+            Level::TRACE,
+            "Read input, using {} as base directory",
+            base_dir.display()
+        );
+        let env = Environment::for_local_directory(&base_dir)?;
+        let mut sink = BufWriter::new(output.writer());
         event!(Level::DEBUG, "Processing Markdown file: {}", filename);
         let parser = Parser::new_ext(
             &input,
             Options::ENABLE_TASKLISTS | Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TABLES,
         );
         pulldown_cmark_mdcat::push_tty(settings, &env, resource_handler, &mut sink, parser)
-    }
         .and_then(|_| {
             event!(Level::TRACE, "Finished rendering, flushing output");
             sink.flush()
         })
-        .or_else(|error| {
-            if error.kind() == std::io::ErrorKind::BrokenPipe {
-                event!(Level::TRACE, "Ignoring broken pipe");
-                Ok(())
-            } else {
-                event!(Level::ERROR, ?error, "Failed to process file: {:#}", error);
-                Err(error)
-            }
-        })?;
+    };
+    result.or_else(|error| {
+        if error.kind() == std::io::ErrorKind::BrokenPipe {
+            event!(Level::TRACE, "Ignoring broken pipe");
+            Ok(())
+        } else {
+            event!(Level::ERROR, ?error, "Failed to process file: {:#}", error);
+            Err(error)
+        }
+    })?;
     Ok(())
 }
 

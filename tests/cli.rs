@@ -9,9 +9,12 @@
 #![deny(warnings, clippy::all)]
 
 mod cli {
+    use std::fs;
     use std::ffi::OsStr;
     use std::io::{Read, Write};
+    use std::path::PathBuf;
     use std::process::{Command, Output, Stdio};
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn cargo_xcat() -> Command {
         Command::new(env!("CARGO_BIN_EXE_xcat"))
@@ -23,6 +26,16 @@ mod cli {
         S: AsRef<OsStr>,
     {
         cargo_xcat().args(args).output().unwrap()
+    }
+
+    fn temp_fixture_dir(name: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("xcat-{name}-{unique}"));
+        fs::create_dir_all(&dir).unwrap();
+        dir
     }
 
     #[test]
@@ -106,5 +119,47 @@ mod cli {
 
         similar_asserts::assert_eq!(String::from_utf8_lossy(&stderr), "");
         assert_eq!(exit_code.code().unwrap(), 0);
+    }
+
+    #[test]
+    fn asciidoc_includes_are_preprocessed_from_files() {
+        let fixture_dir = temp_fixture_dir("include");
+        let main = fixture_dir.join("main.adoc");
+        let included = fixture_dir.join("included.adoc");
+        fs::write(&included, "Included paragraph from another file.\n").unwrap();
+        fs::write(
+            &main,
+            "= Include Demo\n\nBefore include.\n\ninclude::included.adoc[]\n\nAfter include.\n",
+        )
+        .unwrap();
+
+        let args = vec![OsStr::new("--ansi"), main.as_os_str()];
+        let output = run_cargo_xcat(args);
+        let stdout = String::from_utf8(output.stdout).unwrap();
+
+        assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
+        assert!(stdout.contains("Before include."));
+        assert!(stdout.contains("Included paragraph from another file."));
+        assert!(stdout.contains("After include."));
+    }
+
+    #[test]
+    fn asciidoc_conditionals_are_preprocessed() {
+        let fixture_dir = temp_fixture_dir("conditionals");
+        let main = fixture_dir.join("main.adoc");
+        fs::write(
+            &main,
+            "= Conditional Demo\n:feature:\n\nifdef::feature[]\nFeature enabled\nendif::[]\nifndef::xcat-conditional-missing[]\nMissing disabled\nendif::[]\nifeval::[1 + 1 == 2]\nMath works\nendif::[]\n",
+        )
+        .unwrap();
+
+        let args = vec![OsStr::new("--ansi"), main.as_os_str()];
+        let output = run_cargo_xcat(args);
+        let stdout = String::from_utf8(output.stdout).unwrap();
+
+        assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
+        assert!(stdout.contains("Feature enabled"));
+        assert!(stdout.contains("Missing disabled"));
+        assert!(stdout.contains("Math works"));
     }
 }
