@@ -31,4 +31,4 @@ Improve AsciiDoc table fidelity by preserving footer rows as a distinct rendered
 
 * Colspan and rowspan still degrade into a rectangular grid rather than a true merged-cell renderer.
 * Table cells are still flattened to readable text rather than preserving nested block structure as first-class render nodes.
-* The footer marker is an internal convention shared by `xcat` and its bundled renderer, not a general `pulldown-cmark` concept.
+* The footer marker is an internal convention shared by `adcat` and its bundled renderer, not a general `pulldown-cmark` concept.

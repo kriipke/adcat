@@ -23,7 +23,7 @@ doc:
 	cargo doc --workspace --locked
 
 manpage:
-	asciidoctor -b manpage -a reproducible --warnings xcat.1.adoc
+	asciidoctor -b manpage -a reproducible --warnings adcat.1.adoc
 
 clean:
 	cargo clean

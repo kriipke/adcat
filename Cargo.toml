@@ -1,8 +1,8 @@
 [package]
-name = "xcat"
-description = "cat for markdown and asciidoc: Show documents in terminals (fork of mdcat)"
+name = "adcat"
+description = "the cat for asciidoctor + markdown files (fork of mdcat)"
 readme = "README.md"
-documentation = "https://docs.rs/xcat"
+documentation = "https://docs.rs/adcat"
 keywords = ["markdown", "asciidoc", "less", "cat"]
 homepage.workspace = true
 repository.workspace = true
@@ -37,16 +37,16 @@ anstyle-query = { version = "1.1.0", default-features = false }
 [package.metadata.release]
 release = true
 pre-release-replacements = [
-    { file="xcat.1.adoc", search="(?m)^:revnumber:.*$", replace = ":revnumber: {{version}}" },
-    { file="xcat.1.adoc", search="(?m)^:revdate:.*$", replace = ":revdate: {{date}}" },
+    { file="adcat.1.adoc", search="(?m)^:revnumber:.*$", replace = ":revnumber: {{version}}" },
+    { file="adcat.1.adoc", search="(?m)^:revdate:.*$", replace = ":revdate: {{date}}" },
 ]
 
 [workspace]
 members = ["pulldown-cmark-mdcat"]
 
 [workspace.package]
-homepage = "https://github.com/kriipke/xcat"
-repository = "https://github.com/kriipke/xcat"
+homepage = "https://github.com/kriipke/adcat"
+repository = "https://github.com/kriipke/adcat"
 version = "2.7.1"
 categories = ["command-line-utilities", "text-processing"]
 license = "MPL-2.0 AND Apache-2.0"

@@ -2,7 +2,7 @@
 
 == Phase Objective
 
-Enable AsciiDoc preprocessing in `xcat` so file-based documents can use `include::` directives and conditional directives such as `ifdef`, `ifndef`, and `ifeval`.
+Enable AsciiDoc preprocessing in `adcat` so file-based documents can use `include::` directives and conditional directives such as `ifdef`, `ifndef`, and `ifeval`.
 
 == Major Implementation Changes
 
@@ -24,7 +24,7 @@ Enable AsciiDoc preprocessing in `xcat` so file-based documents can use `include
 
 == Assumptions Made
 
-* File-backed AsciiDoc documents should use the parser's built-in preprocessing pipeline rather than a separate `xcat`-local preprocessor.
+* File-backed AsciiDoc documents should use the parser's built-in preprocessing pipeline rather than a separate `adcat`-local preprocessor.
 * Standard input should continue to skip file-relative include resolution because there is no stable source path to anchor relative includes.
 
 == Known Risks Or Follow-up Items

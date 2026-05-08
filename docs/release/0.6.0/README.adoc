@@ -26,7 +26,7 @@ Introduce an internal renderer metadata channel for AsciiDoc table semantics so 
 
 == Assumptions Made
 
-* An internal event marker shared by `xcat` and its bundled renderer is an acceptable escape hatch when `pulldown-cmark` lacks the native semantics needed for high-fidelity AsciiDoc tables.
+* An internal event marker shared by `adcat` and its bundled renderer is an acceptable escape hatch when `pulldown-cmark` lacks the native semantics needed for high-fidelity AsciiDoc tables.
 * Colspan is the most valuable merged-cell behavior to preserve first in terminal output because it directly affects visible row shape.
 
 == Known Risks Or Follow-up Items

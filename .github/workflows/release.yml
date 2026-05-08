@@ -39,11 +39,11 @@ jobs:
       - name: Build manpage
         uses: docker://asciidoctor/docker-asciidoctor
         with:
-          args: asciidoctor -b manpage -a reproducible xcat.1.adoc
+          args: asciidoctor -b manpage -a reproducible adcat.1.adoc
       - uses: actions/upload-artifact@v4
         with:
-          name: xcat.1
-          path: xcat.1
+          name: adcat.1
+          path: adcat.1
 
   # On tag push: build all targets, package tarballs + .deb/.rpm
   build:
@@ -85,7 +85,7 @@ jobs:
       - name: Download manpage
         uses: actions/download-artifact@v4
         with:
-          name: xcat.1
+          name: adcat.1
 
       - name: Install cross
         if: matrix.use_cross
@@ -114,7 +114,7 @@ jobs:
       - name: Strip binary
         if: "!matrix.use_cross && !contains(matrix.target, 'windows')"
         shell: bash
-        run: strip "target/${{ matrix.target }}/release/xcat"
+        run: strip "target/${{ matrix.target }}/release/adcat"
 
       - name: Extract version from tag
         id: version
@@ -185,7 +185,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.version }}
-          name: "xcat ${{ steps.version.outputs.version }}"
+          name: "adcat ${{ steps.version.outputs.version }}"
           body_path: CHANGELOG.md
           files: "assets/*"
         env:

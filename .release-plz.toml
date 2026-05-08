@@ -20,7 +20,7 @@ publish = false
 changelog_update = false
 
 [[package]]
-name = "xcat"
+name = "adcat"
 publish = false
 
 [changelog]

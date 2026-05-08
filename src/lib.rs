@@ -29,12 +29,12 @@ use tracing::{event, instrument, Level};
 use args::ResourceAccess;
 use output::Output;
 
-/// Argument parsing for xcat.
+/// Argument parsing for adcat.
 #[allow(missing_docs)]
 pub mod args;
-/// Output handling for xcat.
+/// Output handling for adcat.
 pub mod output;
-/// Resource handling for xcat.
+/// Resource handling for adcat.
 pub mod resources;
 /// AsciiDoc rendering support.
 pub mod asciidoc;
@@ -151,7 +151,7 @@ pub fn process_file(
     Ok(())
 }
 
-/// Create the resource handler for xcat.
+/// Create the resource handler for adcat.
 pub fn create_resource_handler(access: ResourceAccess) -> Result<DispatchingResourceHandler> {
     let mut resource_handlers: Vec<Box<dyn ResourceUrlHandler>> = vec![Box::new(
         FileResourceHandler::new(DEFAULT_RESOURCE_READ_LIMIT),
@@ -159,7 +159,7 @@ pub fn create_resource_handler(access: ResourceAccess) -> Result<DispatchingReso
     if let ResourceAccess::Remote = access {
         let user_agent = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
         event!(
-            target: "xcat::main",
+            target: "adcat::main",
             Level::DEBUG,
             "Remote resource access permitted, creating HTTP client with user agent {}",
             user_agent

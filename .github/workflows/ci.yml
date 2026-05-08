@@ -41,9 +41,9 @@ jobs:
       - name: Build manpage
         uses: docker://asciidoctor/docker-asciidoctor
         with:
-          args: asciidoctor -b manpage -a reproducible --warnings xcat.1.adoc
+          args: asciidoctor -b manpage -a reproducible --warnings adcat.1.adoc
       - name: Validate manpage
-        run: man -l --warnings=w --pager=cat xcat.1
+        run: man -l --warnings=w --pager=cat adcat.1
         env:
           MANWIDTH: 80
 

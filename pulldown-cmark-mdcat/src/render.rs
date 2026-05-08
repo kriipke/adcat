@@ -43,10 +43,10 @@ pub use data::StateData;
 pub use state::State;
 pub use state::StateAndData;
 
-const TABLE_CELL_SPAN_MARKER_PREFIX: &str = "<!--xcat:table-cell colspan=";
+const TABLE_CELL_SPAN_MARKER_PREFIX: &str = "<!--adcat:table-cell colspan=";
 const TABLE_CELL_SPAN_MARKER_SUFFIX: &str = "-->";
 
-const TABLE_FOOTER_MARKER: &str = "<!--xcat:table-footer-->";
+const TABLE_FOOTER_MARKER: &str = "<!--adcat:table-footer-->";
 
 #[allow(clippy::cognitive_complexity)]
 #[instrument(level = "trace", skip(writer, settings, environment, resource_handler))]

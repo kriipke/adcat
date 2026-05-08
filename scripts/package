@@ -10,15 +10,15 @@ set -exuo pipefail
 VERSION="$1"
 TARGET="$2"
 
-ARCHIVE_NAME="xcat-${VERSION}-${TARGET}"
+ARCHIVE_NAME="adcat-${VERSION}-${TARGET}"
 
 package_windows() {
     local archive_file
     archive_file="${ARCHIVE_NAME}.zip"
     mv LICENSE LICENSE.txt
     7z a "${archive_file}" \
-        "./target/${TARGET}/release/xcat.exe" \
-        ./README.md ./CHANGELOG.md ./LICENSE.txt ./xcat.1.adoc
+        "./target/${TARGET}/release/adcat.exe" \
+        ./README.md ./CHANGELOG.md ./LICENSE.txt ./adcat.1.adoc
     if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
         echo "file=${archive_file}" >>"${GITHUB_OUTPUT}"
         echo "name=${ARCHIVE_NAME}.zip" >>"${GITHUB_OUTPUT}"
@@ -35,8 +35,8 @@ package_unix() {
     mkdir "${pkg_dir}/${ARCHIVE_NAME}"
     cp -r \
         README.md CHANGELOG.md LICENSE \
-        "target/${TARGET}/release/xcat" \
-        "xcat.1" \
+        "target/${TARGET}/release/adcat" \
+        "adcat.1" \
         "${pkg_dir}/${ARCHIVE_NAME}"
     tar -czf "${PWD}/${archive_file}" -C "${pkg_dir}" "${ARCHIVE_NAME}"
     if [[ -n "${GITHUB_OUTPUT:-}" ]]; then

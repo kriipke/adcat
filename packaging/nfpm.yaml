@@ -1,20 +1,20 @@
-name: xcat
+name: adcat
 version: ${VERSION}
 section: utils
 priority: optional
 maintainer: kriipke <kriipke@users.noreply.github.com>
 description: cat for markdown and asciidoc: Show documents in terminals
-homepage: https://github.com/kriipke/xcat
+homepage: https://github.com/kriipke/adcat
 license: MPL-2.0
 contents:
-  - src: ./target/${TARGET}/release/xcat
-    dst: /usr/bin/xcat
-  - src: ./xcat.1
-    dst: /usr/share/man/man1/xcat.1
+  - src: ./target/${TARGET}/release/adcat
+    dst: /usr/bin/adcat
+  - src: ./adcat.1
+    dst: /usr/share/man/man1/adcat.1
   - src: ./README.md
-    dst: /usr/share/doc/xcat/README.md
+    dst: /usr/share/doc/adcat/README.md
   - src: ./LICENSE
-    dst: /usr/share/doc/xcat/LICENSE
+    dst: /usr/share/doc/adcat/LICENSE
 
 overrides:
   deb:

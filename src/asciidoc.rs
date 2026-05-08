@@ -12,8 +12,8 @@ use acdc_parser::{
 };
 use pulldown_cmark::{Alignment, CowStr, Event, HeadingLevel, LinkType, Tag, TagEnd};
 
-pub(crate) const TABLE_FOOTER_MARKER: &str = "<!--xcat:table-footer-->";
-pub(crate) const TABLE_CELL_SPAN_MARKER_PREFIX: &str = "<!--xcat:table-cell colspan=";
+pub(crate) const TABLE_FOOTER_MARKER: &str = "<!--adcat:table-footer-->";
+pub(crate) const TABLE_CELL_SPAN_MARKER_PREFIX: &str = "<!--adcat:table-cell colspan=";
 pub(crate) const TABLE_CELL_SPAN_MARKER_SUFFIX: &str = "-->";
 
 struct RenderContext<'a> {
