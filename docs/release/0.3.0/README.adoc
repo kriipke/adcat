@@ -1,0 +1,35 @@
+= Phase 3 Release Summary
+
+== Phase Objective
+
+Render document-level AsciiDoc constructs instead of dropping them, with a focus on table-of-contents blocks, section anchor IDs, and visible document metadata.
+
+== Major Implementation Changes
+
+* Added a document-scoped render context in `src/asciidoc.rs` so block conversion can consume `Document::toc_entries` consistently while walking nested sections.
+* Section headings now emit stable heading IDs derived from the parser's TOC entry stream, which makes intra-document TOC links resolvable by the renderer.
+* `toc::[]` blocks now render as a terminal-friendly "Table of Contents" list with links to section anchors.
+* Visible document metadata now renders from document attributes, including `description` and revision fields such as `revnumber`, `revdate`, and `revremark`.
+
+== Tests Added Or Updated
+
+* Added a TOC rendering test that proves section links are emitted for TOC blocks.
+* Added a heading-ID test that proves sections reuse the parser's TOC IDs.
+* Added a document metadata test that proves the `description` attribute is surfaced in output.
+
+== Validation
+
+* `cargo test --workspace --locked`: passed
+* `cargo clippy --workspace --all-targets --locked`: passed
+* `cargo build --locked`: passed
+
+== Assumptions Made
+
+* `Document::toc_entries` is the most reliable source of section IDs and ordering, so section-heading IDs are assigned by consuming those entries in document order.
+* Rendering a flat list with indentation is an acceptable terminal representation of a TOC even though it is not a fully nested HTML structure.
+
+== Known Risks Or Follow-up Items
+
+* TOC rendering currently ignores TOC-specific styling options beyond the section list itself.
+* Document attributes that are purely processor configuration are still intentionally not rendered as visible output.
+* The TOC list is indentation-based rather than a fully nested list tree.

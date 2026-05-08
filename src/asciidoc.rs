@@ -7,15 +7,24 @@
 //! Convert AsciiDoc AST to pulldown-cmark events.
 
 use acdc_parser::{
-    Block, CalloutList, DelimitedBlockType, DescriptionList, Document, Footnote, InlineMacro,
-    InlineNode, ListItem, OrderedList, Paragraph, Section, UnorderedList,
+    AttributeValue, Block, CalloutList, DelimitedBlockType, DescriptionList, Document, Footnote,
+    InlineMacro, InlineNode, ListItem, OrderedList, Paragraph, Section, TocEntry, UnorderedList,
 };
 use pulldown_cmark::{Alignment, CowStr, Event, HeadingLevel, LinkType, Tag, TagEnd};
 
 pub(crate) const TABLE_FOOTER_MARKER: &str = "<!--xcat:table-footer-->";
 
+struct RenderContext<'a> {
+    toc_entries: &'a [TocEntry<'a>],
+    next_toc_entry: usize,
+}
+
 /// Convert an AsciiDoc document to pulldown-cmark events.
 pub fn document_to_events(doc: &Document) -> Vec<Event<'static>> {
+    let mut context = RenderContext {
+        toc_entries: &doc.toc_entries,
+        next_toc_entry: 0,
+    };
     let mut events: Vec<Event<'static>> = Vec::new();
 
     if let Some(header) = &doc.header {
@@ -28,9 +37,10 @@ pub fn document_to_events(doc: &Document) -> Vec<Event<'static>> {
             }
         }
     }
+    events.extend(document_metadata_to_events(doc));
 
     for block in &doc.blocks {
-        events.extend(block_to_events(block));
+        events.extend(block_to_events(block, &mut context));
     }
 
     for footnote in &doc.footnotes {
@@ -102,10 +112,18 @@ fn link_with_inline_text_events(
 }
 
 fn title_to_events(title: &acdc_parser::Title, level: HeadingLevel) -> Vec<Event<'static>> {
+    title_to_events_with_id(title, level, None)
+}
+
+fn title_to_events_with_id(
+    title: &acdc_parser::Title,
+    level: HeadingLevel,
+    id: Option<CowStr<'static>>,
+) -> Vec<Event<'static>> {
     let mut events = Vec::new();
     events.push(Event::Start(Tag::Heading {
         level,
-        id: None,
+        id,
         classes: vec![],
         attrs: vec![],
     }));
@@ -114,27 +132,28 @@ fn title_to_events(title: &acdc_parser::Title, level: HeadingLevel) -> Vec<Event
     events
 }
 
-fn section_to_events(section: &Section) -> Vec<Event<'static>> {
+fn section_to_events(section: &Section, context: &mut RenderContext<'_>) -> Vec<Event<'static>> {
     let mut events = Vec::new();
     let level = heading_level(section.level);
-    events.extend(title_to_events(&section.title, level));
+    let section_id = context.next_section_id().map(|id| CowStr::from(id.to_string()));
+    events.extend(title_to_events_with_id(&section.title, level, section_id));
 
     for block in &section.content {
-        events.extend(block_to_events(block));
+        events.extend(block_to_events(block, context));
     }
 
     events
 }
 
-fn block_to_events(block: &Block) -> Vec<Event<'static>> {
+fn block_to_events(block: &Block, context: &mut RenderContext<'_>) -> Vec<Event<'static>> {
     match block {
         Block::Paragraph(para) => paragraph_to_events(para),
-        Block::Section(section) => section_to_events(section),
-        Block::UnorderedList(list) => unordered_list_to_events(list),
-        Block::OrderedList(list) => ordered_list_to_events(list),
-        Block::CalloutList(list) => callout_list_to_events(list),
-        Block::DescriptionList(list) => description_list_to_events(list),
-        Block::DelimitedBlock(delimited) => delimited_block_to_events(delimited),
+        Block::Section(section) => section_to_events(section, context),
+        Block::UnorderedList(list) => unordered_list_to_events(list, context),
+        Block::OrderedList(list) => ordered_list_to_events(list, context),
+        Block::CalloutList(list) => callout_list_to_events(list, context),
+        Block::DescriptionList(list) => description_list_to_events(list, context),
+        Block::DelimitedBlock(delimited) => delimited_block_to_events(delimited, context),
         Block::ThematicBreak(_) => vec![Event::Rule],
         Block::PageBreak(_) => vec![Event::Rule],
         Block::DiscreteHeader(header) => {
@@ -169,16 +188,86 @@ fn block_to_events(block: &Block) -> Vec<Event<'static>> {
             events.push(Event::Text(label.to_string().into()));
             events.push(Event::End(TagEnd::Paragraph));
             for block in &admon.blocks {
-                events.extend(block_to_events(block));
+                events.extend(block_to_events(block, context));
             }
             events
         }
         Block::Comment(_) => vec![],
-        Block::DocumentAttribute(_) | Block::TableOfContents(_) => vec![],
+        Block::DocumentAttribute(_) => vec![],
+        Block::TableOfContents(_) => table_of_contents_to_events(context.toc_entries),
         Block::Audio(audio) => media_block_to_events("Audio", &audio.source),
         Block::Video(video) => video_block_to_events(video),
         _ => unsupported_block_events("block"),
     }
+}
+
+impl<'a> RenderContext<'a> {
+    fn next_section_id(&mut self) -> Option<&'a str> {
+        let entry = self.toc_entries.get(self.next_toc_entry)?;
+        self.next_toc_entry += 1;
+        Some(entry.id)
+    }
+}
+
+fn document_metadata_to_events(doc: &Document) -> Vec<Event<'static>> {
+    let mut events = Vec::new();
+    if let Some(description) = doc.attributes.get("description").and_then(attribute_to_text) {
+        events.push(Event::Start(Tag::Paragraph));
+        events.push(Event::Text(description.into()));
+        events.push(Event::End(TagEnd::Paragraph));
+    }
+
+    let revision = [
+        doc.attributes.get("revnumber").and_then(attribute_to_text),
+        doc.attributes.get("revdate").and_then(attribute_to_text),
+        doc.attributes.get("revremark").and_then(attribute_to_text),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>();
+    if !revision.is_empty() {
+        events.push(Event::Start(Tag::Paragraph));
+        events.push(Event::Text(revision.join(", ").into()));
+        events.push(Event::End(TagEnd::Paragraph));
+    }
+
+    events
+}
+
+fn attribute_to_text(value: &AttributeValue<'_>) -> Option<String> {
+    match value {
+        AttributeValue::String(value) if !value.is_empty() => Some(value.to_string()),
+        AttributeValue::Bool(true) => Some("true".to_string()),
+        _ => None,
+    }
+}
+
+fn table_of_contents_to_events(toc_entries: &[TocEntry<'_>]) -> Vec<Event<'static>> {
+    if toc_entries.is_empty() {
+        return vec![];
+    }
+
+    let mut events = vec![Event::Start(Tag::Paragraph)];
+    events.push(Event::Text("Table of Contents".into()));
+    events.push(Event::End(TagEnd::Paragraph));
+    events.push(Event::Start(Tag::List(None)));
+    for entry in toc_entries {
+        events.push(Event::Start(Tag::Item));
+        if entry.level > 1 {
+            events.push(Event::Text("  ".repeat(entry.level.saturating_sub(1) as usize).into()));
+        }
+        events.push(Event::Start(Tag::Link {
+            link_type: LinkType::Inline,
+            dest_url: format!("#{}", entry.id).into(),
+            title: CowStr::from(""),
+            id: CowStr::from(""),
+        }));
+        events.extend(inlines_to_events(entry.title.as_ref()));
+        events.push(Event::End(TagEnd::Link));
+        events.push(Event::End(TagEnd::Item));
+    }
+    events.push(Event::End(TagEnd::List(false)));
+    events
 }
 
 fn media_block_to_events(label: &str, source: &acdc_parser::Source) -> Vec<Event<'static>> {
@@ -528,26 +617,32 @@ fn paragraph_to_events(para: &Paragraph) -> Vec<Event<'static>> {
     events
 }
 
-fn list_item_to_events(item: &ListItem) -> Vec<Event<'static>> {
+fn list_item_to_events(item: &ListItem, context: &mut RenderContext<'_>) -> Vec<Event<'static>> {
     let mut events = vec![Event::Start(Tag::Item)];
     events.extend(inlines_to_events(&item.principal));
     for block in &item.blocks {
-        events.extend(block_to_events(block));
+        events.extend(block_to_events(block, context));
     }
     events.push(Event::End(TagEnd::Item));
     events
 }
 
-fn unordered_list_to_events(list: &UnorderedList) -> Vec<Event<'static>> {
+fn unordered_list_to_events(
+    list: &UnorderedList,
+    context: &mut RenderContext<'_>,
+) -> Vec<Event<'static>> {
     let mut events = vec![Event::Start(Tag::List(None))];
     for item in &list.items {
-        events.extend(list_item_to_events(item));
+        events.extend(list_item_to_events(item, context));
     }
     events.push(Event::End(TagEnd::List(false)));
     events
 }
 
-fn ordered_list_to_events(list: &OrderedList) -> Vec<Event<'static>> {
+fn ordered_list_to_events(
+    list: &OrderedList,
+    context: &mut RenderContext<'_>,
+) -> Vec<Event<'static>> {
     let start = list
         .marker
         .chars()
@@ -559,20 +654,23 @@ fn ordered_list_to_events(list: &OrderedList) -> Vec<Event<'static>> {
         .unwrap_or(1);
     let mut events = vec![Event::Start(Tag::List(Some(start)))];
     for item in &list.items {
-        events.extend(list_item_to_events(item));
+        events.extend(list_item_to_events(item, context));
     }
     events.push(Event::End(TagEnd::List(true)));
     events
 }
 
-fn callout_list_to_events(list: &CalloutList) -> Vec<Event<'static>> {
+fn callout_list_to_events(
+    list: &CalloutList,
+    context: &mut RenderContext<'_>,
+) -> Vec<Event<'static>> {
     let start = list.items.first().map(|item| item.callout.number as u64);
     let mut events = vec![Event::Start(Tag::List(start))];
     for item in &list.items {
         let mut item_events = vec![Event::Start(Tag::Item)];
         item_events.extend(inlines_to_events(&item.principal));
         for block in &item.blocks {
-            item_events.extend(block_to_events(block));
+            item_events.extend(block_to_events(block, context));
         }
         item_events.push(Event::End(TagEnd::Item));
         events.extend(item_events);
@@ -581,7 +679,10 @@ fn callout_list_to_events(list: &CalloutList) -> Vec<Event<'static>> {
     events
 }
 
-fn description_list_to_events(list: &DescriptionList) -> Vec<Event<'static>> {
+fn description_list_to_events(
+    list: &DescriptionList,
+    context: &mut RenderContext<'_>,
+) -> Vec<Event<'static>> {
     let mut events = Vec::new();
     for item in &list.items {
         events.push(Event::Start(Tag::Paragraph));
@@ -590,13 +691,16 @@ fn description_list_to_events(list: &DescriptionList) -> Vec<Event<'static>> {
         events.extend(inlines_to_events(&item.principal_text));
         events.push(Event::End(TagEnd::Paragraph));
         for block in &item.description {
-            events.extend(block_to_events(block));
+            events.extend(block_to_events(block, context));
         }
     }
     events
 }
 
-fn delimited_block_to_events(block: &acdc_parser::DelimitedBlock) -> Vec<Event<'static>> {
+fn delimited_block_to_events(
+    block: &acdc_parser::DelimitedBlock,
+    context: &mut RenderContext<'_>,
+) -> Vec<Event<'static>> {
     match &block.inner {
         DelimitedBlockType::DelimitedListing(inlines)
         | DelimitedBlockType::DelimitedLiteral(inlines) => {
@@ -615,7 +719,7 @@ fn delimited_block_to_events(block: &acdc_parser::DelimitedBlock) -> Vec<Event<'
         DelimitedBlockType::DelimitedQuote(blocks) => {
             let mut events = vec![Event::Start(Tag::BlockQuote(None))];
             for block in blocks {
-                events.extend(block_to_events(block));
+                events.extend(block_to_events(block, context));
             }
             events.push(Event::End(TagEnd::BlockQuote(None)));
             events
@@ -625,7 +729,7 @@ fn delimited_block_to_events(block: &acdc_parser::DelimitedBlock) -> Vec<Event<'
         | DelimitedBlockType::DelimitedOpen(blocks) => {
             let mut events = Vec::new();
             for block in blocks {
-                events.extend(block_to_events(block));
+                events.extend(block_to_events(block, context));
             }
             events
         }
@@ -1181,6 +1285,44 @@ mod tests {
             .expect("expected footer row");
 
         assert!(footer_marker_index < footer_row_index);
+    }
+
+    #[test]
+    fn toc_blocks_render_links_for_sections() {
+        let events = parse_events("= Doc\n\ntoc::[]\n\n== Section A\n\n=== Section B\n");
+
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Text(text) if text.as_ref() == "Table of Contents"
+        )));
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Start(Tag::Link { dest_url, .. }) if dest_url.as_ref() == "#_section_a"
+        )));
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Start(Tag::Link { dest_url, .. }) if dest_url.as_ref() == "#_section_b"
+        )));
+    }
+
+    #[test]
+    fn section_headings_use_toc_entry_ids() {
+        let events = parse_events("= Doc\n\n== Section A\n");
+
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Start(Tag::Heading { id: Some(id), .. }) if id.as_ref() == "_section_a"
+        )));
+    }
+
+    #[test]
+    fn document_description_attribute_is_rendered() {
+        let events = parse_events("= Doc\n:description: Summary line\n\nBody.\n");
+
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Text(text) if text.as_ref() == "Summary line"
+        )));
     }
 
     #[test]
