@@ -364,9 +364,17 @@ pub fn write_start_heading<W: Write>(
 }
 
 fn calculate_column_widths(table: &CurrentTable) -> Option<Vec<usize>> {
-    let first_row = table.head.as_ref().or(table.rows.first())?;
+    let first_row = table
+        .head
+        .as_ref()
+        .or(table.rows.first())
+        .or(table.footer.first())?;
     let mut widths = vec![0; first_row.cells.len()];
-    let rows = table.head.iter().chain(table.rows.as_slice());
+    let rows = table
+        .head
+        .iter()
+        .chain(table.rows.as_slice())
+        .chain(table.footer.as_slice());
     for row in rows {
         let current = row.cells.as_slice().iter().map(|cell| {
             cell.fragments
@@ -474,6 +482,28 @@ pub fn write_table<W: Write>(
                 writeln!(writer)?;
             }
         }
+        if !table.footer.is_empty() {
+            write_table_rule(writer, capabilities, rule_length)?;
+        }
+        for row in table.footer {
+            let lines = row.cells.iter().map(table_cell_lines).collect::<Vec<_>>();
+            let row_height = lines.iter().map(Vec::len).max().unwrap_or(1);
+            for line_index in 0..row_height {
+                for (((cell_lines, &width), &alignment), _cell) in zip(
+                    zip(zip(lines.iter(), &widths), &table.alignments),
+                    &row.cells,
+                ) {
+                    let content = cell_lines.get(line_index).map_or("", String::as_str);
+                    write_styled(
+                        writer,
+                        capabilities,
+                        &Style::new(),
+                        format_table_cell_line(content, width, alignment),
+                    )?;
+                }
+                writeln!(writer)?;
+            }
+        }
         write_table_rule(writer, capabilities, rule_length)?;
     }
     // Do nothing when there are no rows in the table, which should be impossible.
@@ -503,10 +533,48 @@ mod tests {
                 }],
                 current_cell: TableCell::empty(),
             }],
+            footer: Vec::new(),
             current_row: crate::render::data::TableRow::empty(),
             alignments: vec![Alignment::Left],
+            current_section: crate::render::data::TableSection::Body,
         };
 
         assert_eq!(calculate_column_widths(&table), Some(vec![6]));
+    }
+
+    #[test]
+    fn write_table_separates_footer_rows_with_a_rule() {
+        let table = CurrentTable {
+            head: None,
+            rows: vec![crate::render::data::TableRow {
+                cells: vec![TableCell {
+                    fragments: vec!["body".into()],
+                }],
+                current_cell: TableCell::empty(),
+            }],
+            footer: vec![crate::render::data::TableRow {
+                cells: vec![TableCell {
+                    fragments: vec!["footer".into()],
+                }],
+                current_cell: TableCell::empty(),
+            }],
+            current_row: crate::render::data::TableRow::empty(),
+            alignments: vec![Alignment::Left],
+            current_section: crate::render::data::TableSection::Body,
+        };
+
+        let mut output = Vec::new();
+        write_table(
+            &mut output,
+            &TerminalCapabilities::default(),
+            &TerminalSize::default(),
+            table,
+        )
+        .unwrap();
+
+        let rendered = String::from_utf8(output).unwrap();
+        assert!(rendered.contains(" body "));
+        assert!(rendered.contains(" footer "));
+        assert!(rendered.matches('─').count() >= 2);
     }
 }

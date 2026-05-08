@@ -12,6 +12,8 @@ use acdc_parser::{
 };
 use pulldown_cmark::{Alignment, CowStr, Event, HeadingLevel, LinkType, Tag, TagEnd};
 
+pub(crate) const TABLE_FOOTER_MARKER: &str = "<!--xcat:table-footer-->";
+
 /// Convert an AsciiDoc document to pulldown-cmark events.
 pub fn document_to_events(doc: &Document) -> Vec<Event<'static>> {
     let mut events: Vec<Event<'static>> = Vec::new();
@@ -512,6 +514,7 @@ fn table_to_events(table: &acdc_parser::Table) -> Vec<Event<'static>> {
         events.extend(table_row_to_events(row));
     }
     if let Some(footer) = &expanded_footer {
+        events.push(Event::InlineHtml(TABLE_FOOTER_MARKER.into()));
         events.extend(table_row_to_events(footer));
     }
     events.push(Event::End(TagEnd::Table));
@@ -1156,6 +1159,28 @@ mod tests {
             event,
             Event::Text(text) if text.as_ref() == "42"
         )));
+    }
+
+    #[test]
+    fn table_footers_emit_footer_marker_before_footer_row() {
+        let events = parse_events(
+            "[options=\"footer\"]\n|===\n| Name | Value\n| body | 1\n| footer | 2\n|===\n",
+        );
+
+        let footer_marker_index = events
+            .iter()
+            .position(
+                |event| matches!(event, Event::InlineHtml(html) if html.as_ref() == TABLE_FOOTER_MARKER),
+            )
+            .expect("expected footer marker");
+        let footer_row_index = events
+            .iter()
+            .enumerate()
+            .skip(footer_marker_index + 1)
+            .find_map(|(index, event)| matches!(event, Event::Start(Tag::TableRow)).then_some(index))
+            .expect("expected footer row");
+
+        assert!(footer_marker_index < footer_row_index);
     }
 
     #[test]

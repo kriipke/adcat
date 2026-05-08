@@ -43,6 +43,8 @@ pub use data::StateData;
 pub use state::State;
 pub use state::StateAndData;
 
+const TABLE_FOOTER_MARKER: &str = "<!--xcat:table-footer-->";
+
 #[allow(clippy::cognitive_complexity)]
 #[instrument(level = "trace", skip(writer, settings, environment, resource_handler))]
 pub fn write_event<'a, W: Write>(
@@ -902,6 +904,14 @@ pub fn write_event<'a, W: Write>(
         }
         (Stacked(stack, TableBlock), Text(text)) | (Stacked(stack, TableBlock), Code(text)) => {
             let current_table = data.current_table.push_fragment(text);
+            let data = StateData {
+                current_table,
+                ..data
+            };
+            Stacked(stack, TableBlock).and_data(data).ok()
+        }
+        (Stacked(stack, TableBlock), InlineHtml(html)) if html.as_ref() == TABLE_FOOTER_MARKER => {
+            let current_table = data.current_table.begin_footer();
             let data = StateData {
                 current_table,
                 ..data

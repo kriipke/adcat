@@ -93,10 +93,25 @@ pub struct CurrentTable<'a> {
     pub(super) head: Option<TableRow<'a>>,
     /// Complete rows of the table.
     pub(super) rows: Vec<TableRow<'a>>,
+    /// Footer rows of the table.
+    pub(super) footer: Vec<TableRow<'a>>,
     /// Current incomplete row of the table.
     pub(super) current_row: TableRow<'a>,
     /// Alignments of columns.
     pub(super) alignments: Vec<Alignment>,
+    /// The section currently collecting rows.
+    pub(super) current_section: TableSection,
+}
+
+/// Current table section while collecting rows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TableSection {
+    /// Header row handling.
+    Head,
+    /// Main body rows.
+    Body,
+    /// Footer rows.
+    Footer,
 }
 
 impl<'a> CurrentTable<'a> {
@@ -105,8 +120,10 @@ impl<'a> CurrentTable<'a> {
         Self {
             head: None,
             rows: Vec::new(),
+            footer: Vec::new(),
             current_row: TableRow::empty(),
             alignments: Vec::new(),
+            current_section: TableSection::Head,
         }
     }
 
@@ -127,13 +144,23 @@ impl<'a> CurrentTable<'a> {
     pub(super) fn end_head(mut self) -> Self {
         self.head = Some(self.current_row);
         self.current_row = TableRow::empty();
+        self.current_section = TableSection::Body;
         self
     }
 
     /// Complete the current row and start a new row.
     pub(super) fn end_row(mut self) -> Self {
-        self.rows.push(self.current_row);
+        match self.current_section {
+            TableSection::Head | TableSection::Body => self.rows.push(self.current_row),
+            TableSection::Footer => self.footer.push(self.current_row),
+        }
         self.current_row = TableRow::empty();
+        self
+    }
+
+    /// Switch subsequent rows to the footer section.
+    pub(super) fn begin_footer(mut self) -> Self {
+        self.current_section = TableSection::Footer;
         self
     }
 }

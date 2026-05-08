@@ -1,0 +1,34 @@
+= Phase 2 Release Summary
+
+== Phase Objective
+
+Improve AsciiDoc table fidelity by preserving footer rows as a distinct rendered table section instead of flattening them into ordinary body rows.
+
+== Major Implementation Changes
+
+* Added an explicit footer section marker to the AsciiDoc table converter in `src/asciidoc.rs`.
+* Extended the terminal table state model in `pulldown-cmark-mdcat/src/render/data.rs` with footer-row storage and section tracking.
+* Updated the renderer event loop in `pulldown-cmark-mdcat/src/render.rs` to detect the footer marker and route subsequent rows into the footer section.
+* Updated the table writer in `pulldown-cmark-mdcat/src/render/write.rs` to render a separator rule before footer rows and to include footer rows in width calculation.
+
+== Tests Added Or Updated
+
+* Added an AsciiDoc converter test proving footer rows emit the internal footer marker before the footer row.
+* Added a renderer test proving footer rows are separated from body rows by a rule in terminal output.
+
+== Validation
+
+* `cargo test --workspace --locked`: passed
+* `cargo clippy --workspace --all-targets --locked`: passed
+* `cargo build --locked`: passed
+
+== Assumptions Made
+
+* Footer semantics can be carried through the existing `pulldown-cmark` event pipeline using an internal marker event without exposing a new public event model.
+* A visual section separator is an appropriate terminal representation for AsciiDoc table footers.
+
+== Known Risks Or Follow-up Items
+
+* Colspan and rowspan still degrade into a rectangular grid rather than a true merged-cell renderer.
+* Table cells are still flattened to readable text rather than preserving nested block structure as first-class render nodes.
+* The footer marker is an internal convention shared by `xcat` and its bundled renderer, not a general `pulldown-cmark` concept.
