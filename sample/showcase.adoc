@@ -1,0 +1,27 @@
+= AsciiDoc Language
+
+== Markup
+
+`adcat` supports standard _inline_ *markup* and block markup, even with syntax highlighting for code blocks.
+
+[quote,Abraham Lincoln]
+____
+Don't believe everything you read on the Internet.
+____
+
+[source,rust]
+----
+fn main() {
+    println!("Hello world!");
+}
+----
+
+== Specials
+
+`adcat` prints images and hyperlinks:
+
+image::./rust-logo-128x128.png[Rust]
+
+Source: https://www.rust-lang.org/[Rust]
+
+Enjoy ❤️

@@ -7,8 +7,9 @@
 //! Convert AsciiDoc AST to pulldown-cmark events.
 
 use acdc_parser::{
-    AttributeValue, Block, CalloutList, DelimitedBlockType, DescriptionList, Document, Footnote,
-    InlineMacro, InlineNode, ListItem, OrderedList, Paragraph, Section, TocEntry, UnorderedList,
+    AttributeValue, Block, BlockMetadata, CalloutList, DelimitedBlockType, DescriptionList,
+    Document, Footnote, InlineMacro, InlineNode, ListItem, OrderedList, Paragraph, Section,
+    TocEntry, UnorderedList,
 };
 use pulldown_cmark::{Alignment, CowStr, Event, HeadingLevel, LinkType, Tag, TagEnd};
 
@@ -916,6 +917,33 @@ fn description_list_to_events(
     events
 }
 
+/// Render the quote attribution (author and cited work) as a trailing
+/// paragraph inside a block quote, e.g. `— Abraham Lincoln, Gettysburg Address`.
+/// Returns no events when the block carries neither an attribution nor a
+/// citetitle.
+fn attribution_events(metadata: &BlockMetadata<'_>) -> Vec<Event<'static>> {
+    let attribution = metadata.attribution.as_ref().filter(|a| !a.is_empty());
+    let citetitle = metadata.citetitle.as_ref().filter(|c| !c.is_empty());
+    if attribution.is_none() && citetitle.is_none() {
+        return Vec::new();
+    }
+
+    let mut events = vec![Event::Start(Tag::Paragraph), Event::Text("— ".into())];
+    if let Some(attribution) = attribution {
+        events.extend(inlines_to_events(attribution.as_ref()));
+    }
+    if let Some(citetitle) = citetitle {
+        if attribution.is_some() {
+            events.push(Event::Text(", ".into()));
+        }
+        events.push(Event::Start(Tag::Emphasis));
+        events.extend(inlines_to_events(citetitle.as_ref()));
+        events.push(Event::End(TagEnd::Emphasis));
+    }
+    events.push(Event::End(TagEnd::Paragraph));
+    events
+}
+
 fn delimited_block_to_events(
     block: &acdc_parser::DelimitedBlock,
     context: &mut RenderContext<'_>,
@@ -937,9 +965,10 @@ fn delimited_block_to_events(
         }
         DelimitedBlockType::DelimitedQuote(blocks) => {
             let mut events = vec![Event::Start(Tag::BlockQuote(None))];
-            for block in blocks {
-                events.extend(block_to_events(block, context));
+            for inner in blocks {
+                events.extend(block_to_events(inner, context));
             }
+            events.extend(attribution_events(&block.metadata));
             events.push(Event::End(TagEnd::BlockQuote(None)));
             events
         }
@@ -965,6 +994,7 @@ fn delimited_block_to_events(
             ];
             events.extend(inlines_to_events(inlines));
             events.push(Event::End(TagEnd::Paragraph));
+            events.extend(attribution_events(&block.metadata));
             events.push(Event::End(TagEnd::BlockQuote(None)));
             events
         }
@@ -1418,6 +1448,25 @@ mod tests {
         assert!(events.iter().any(|event| matches!(
             event,
             Event::Text(text) if text.as_ref().contains("Roses are red")
+        )));
+    }
+
+    #[test]
+    fn quote_attribution_is_rendered_inside_the_block_quote() {
+        let events =
+            parse_events("[quote,Abraham Lincoln]\n____\nGovernment of the people.\n____\n");
+
+        assert!(events
+            .iter()
+            .any(|event| matches!(event, Event::Start(Tag::BlockQuote(None)))));
+        // The attribution renders as a trailing em-dash line inside the quote.
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Text(text) if text.as_ref().contains("Abraham Lincoln")
+        )));
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Text(text) if text.as_ref() == "— "
         )));
     }
 

@@ -2,7 +2,7 @@
 
 ## Markup
 
-`mdcat` supports standard *inline* **markup** and block markup, even with syntax
+`adcat` supports standard *inline* **markup** and block markup, even with syntax
 highlighting for code blocks.
 
 > Don't believe everything you read on the Internet.
@@ -17,7 +17,7 @@ fn main() {
 
 ## Specials
 
-`mdcat` prints images and hyperlinks:
+`adcat` prints images and hyperlinks:
 
 ![Rust](./rust-logo-128x128.png)
 

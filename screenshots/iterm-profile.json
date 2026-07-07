@@ -1,0 +1,14 @@
+{
+  "Profiles": [
+    {
+      "Name": "adcat-screenshot",
+      "Guid": "adcat-screenshot",
+      "Normal Font": "JetBrainsMono-Regular 14",
+      "Columns": 120,
+      "Rows": 42,
+      "Unlimited Scrollback": true,
+      "Silence Bell": true,
+      "Custom Directory": "No"
+    }
+  ]
+}

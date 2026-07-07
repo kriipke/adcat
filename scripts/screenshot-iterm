@@ -1,0 +1,110 @@
+#!/bin/bash
+# Copyright 2020 Sebastian Wiesnser <sebastian@swsnr.de>
+
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+# Render sample/showcase.md and sample/showcase.adoc side by side with adcat in
+# iTerm2, then screenshot the window to screenshots/side-by-side.png.
+
+set -euo pipefail
+
+TOPLEVEL="$(git rev-parse --show-toplevel)"
+cd "${TOPLEVEL}"
+
+DEST="${TOPLEVEL}/screenshots/side-by-side.png"
+
+# Install the "adcat-screenshot" profile (JetBrains Mono, 120x42) as a dynamic
+# profile so iTerm2 picks it up live, and remove it again when we're done.
+PROFILE_DIR="${HOME}/Library/Application Support/iTerm2/DynamicProfiles"
+PROFILE_LINK="${PROFILE_DIR}/adcat-screenshot.json"
+mkdir -p "${PROFILE_DIR}"
+ln -sf "${TOPLEVEL}/screenshots/iterm-profile.json" "${PROFILE_LINK}"
+
+WINDOW_ID=""
+cleanup() {
+    if [ -n "${WINDOW_ID}" ]; then
+        osascript -e "tell application \"iTerm2\" to close (first window whose id is ${WINDOW_ID})" >/dev/null 2>&1 || true
+    fi
+    rm -f "${PROFILE_LINK}"
+}
+trap cleanup EXIT
+
+# Let iTerm2 notice the freshly installed dynamic profile.
+open -a iTerm
+sleep 2
+
+# Build the side-by-side window: left renders the Markdown showcase, right
+# renders the AsciiDoc showcase.  Both run from the repository root so the
+# relative sample and image paths resolve.  The window id is returned so we can
+# find and later close exactly this window.
+WINDOW_ID="$(osascript <<APPLESCRIPT
+tell application "iTerm2"
+    activate
+    set adcatWindow to (create window with profile "adcat-screenshot")
+    tell adcatWindow
+        tell current session
+            write text "cd ${TOPLEVEL} && tput home && tput ed && adcat --columns 50 ./sample/showcase.md"
+            set rightSession to (split vertically with profile "adcat-screenshot")
+        end tell
+        tell rightSession
+            write text "cd ${TOPLEVEL} && tput home && tput ed && adcat --columns 50 ./sample/showcase.adoc"
+        end tell
+    end tell
+    return id of adcatWindow
+end tell
+APPLESCRIPT
+)"
+
+# Give adcat time to render (including the inline image).
+sleep 3
+
+# On a fresh machine iTerm2 asks to allow "terminal-initiated display" the first
+# time adcat draws an inline image.  Best-effort: tick "Remember my choice" (so
+# it never asks again) and accept.  A no-op once the choice is remembered.
+osascript >/dev/null 2>&1 <<'APPLESCRIPT' || true
+tell application "System Events" to tell process "iTerm2"
+    repeat with w in windows
+        repeat with sh in (sheets of w)
+            try
+                repeat with cb in (checkboxes of sh)
+                    if value of cb is 0 then click cb
+                end repeat
+            end try
+            try
+                click (first button of sh whose name is "Yes")
+            end try
+        end repeat
+    end repeat
+end tell
+APPLESCRIPT
+
+# Capture just our window's region.  We activated iTerm2 and created this window
+# last, so it is the frontmost window.
+BOUNDS="$(osascript <<'APPLESCRIPT'
+tell application "System Events"
+    tell process "iTerm2"
+        set frontmost to true
+        set {x, y} to position of front window
+        set {w, h} to size of front window
+    end tell
+end tell
+return (x as text) & " " & (y as text) & " " & (w as text) & " " & (h as text)
+APPLESCRIPT
+)"
+read -r X Y W H <<< "${BOUNDS}"
+
+if [ -z "${X:-}" ] || [ -z "${W:-}" ]; then
+    echo "error: could not determine the iTerm2 window bounds" >&2
+    exit 1
+fi
+
+screencapture -x -R"${X},${Y},${W},${H}" "${DEST}"
+
+# Optimise the PNG when oxipng is available (matches the old pipeline).
+if command -v oxipng >/dev/null 2>&1; then
+    oxipng --quiet "${DEST}"
+fi
+
+echo "Wrote ${DEST}"
