@@ -944,6 +944,27 @@ fn attribution_events(metadata: &BlockMetadata<'_>) -> Vec<Event<'static>> {
     events
 }
 
+/// Extract the source language of a `[source,lang]` block for syntax
+/// highlighting. acdc stores the language as a bare (value-less) attribute
+/// alongside the `source` style, e.g. `[source,rust]` → style `source` plus an
+/// attribute `rust` with no value. Only trust it when there is exactly one such
+/// bare attribute, so ambiguous attribute lists fall back to no highlighting.
+fn source_language(metadata: &BlockMetadata<'_>) -> Option<String> {
+    if metadata.style != Some("source") {
+        return None;
+    }
+    let mut bare = metadata
+        .attributes
+        .iter()
+        .filter(|(_, value)| matches!(value, AttributeValue::None))
+        .map(|(name, _)| name.as_ref());
+    let language = bare.next()?;
+    if bare.next().is_some() {
+        return None;
+    }
+    Some(language.to_owned())
+}
+
 fn delimited_block_to_events(
     block: &acdc_parser::DelimitedBlock,
     context: &mut RenderContext<'_>,
@@ -955,9 +976,13 @@ fn delimited_block_to_events(
             if !text.ends_with('\n') {
                 text.push('\n');
             }
+            // Pass the source language (from `[source,lang]`) through as the
+            // fenced code block's info string so it gets syntax highlighting,
+            // exactly like a Markdown ```lang fence.
+            let language = source_language(&block.metadata).unwrap_or_default();
             vec![
                 Event::Start(Tag::CodeBlock(pulldown_cmark::CodeBlockKind::Fenced(
-                    CowStr::from(""),
+                    CowStr::from(language),
                 ))),
                 Event::Text(text.into()),
                 Event::End(TagEnd::CodeBlock),
@@ -1467,6 +1492,17 @@ mod tests {
         assert!(events.iter().any(|event| matches!(
             event,
             Event::Text(text) if text.as_ref() == "— "
+        )));
+    }
+
+    #[test]
+    fn source_blocks_carry_their_language_for_highlighting() {
+        let events = parse_events("[source,rust]\n----\nfn main() {}\n----\n");
+
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Event::Start(Tag::CodeBlock(pulldown_cmark::CodeBlockKind::Fenced(lang)))
+                if lang.as_ref() == "rust"
         )));
     }
 
