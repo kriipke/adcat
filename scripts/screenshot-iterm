@@ -15,6 +15,11 @@ cd "${TOPLEVEL}"
 
 DEST="${TOPLEVEL}/screenshots/side-by-side.png"
 
+# Screenshot the freshly built binary, not whatever `adcat` is on PATH, so the
+# image always reflects the current source.
+cargo build --release
+ADCAT="${TOPLEVEL}/target/release/adcat"
+
 # Install the "adcat-screenshot" profile (JetBrains Mono, 120x42) as a dynamic
 # profile so iTerm2 picks it up live, and remove it again when we're done.
 PROFILE_DIR="${HOME}/Library/Application Support/iTerm2/DynamicProfiles"
@@ -45,11 +50,11 @@ tell application "iTerm2"
     set adcatWindow to (create window with profile "adcat-screenshot")
     tell adcatWindow
         tell current session
-            write text "cd ${TOPLEVEL} && tput home && tput ed && adcat --columns 50 ./sample/showcase.md"
+            write text "cd ${TOPLEVEL} && tput home && tput ed && ${ADCAT} --columns 50 ./sample/showcase.md"
             set rightSession to (split vertically with profile "adcat-screenshot")
         end tell
         tell rightSession
-            write text "cd ${TOPLEVEL} && tput home && tput ed && adcat --columns 50 ./sample/showcase.adoc"
+            write text "cd ${TOPLEVEL} && tput home && tput ed && ${ADCAT} --columns 50 ./sample/showcase.adoc"
         end tell
     end tell
     return id of adcatWindow
