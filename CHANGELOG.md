@@ -8,6 +8,31 @@ Use `cargo release` to create a new release.
 
 ## [Unreleased]
 
+## [2.8.0] – 2026-07-07
+
+First release of `adcat`, a fork of [`mdcat`](https://github.com/swsnr/mdcat) that adds first-class AsciiDoc rendering while keeping Markdown support intact.
+Files ending in `.adoc` or `.asciidoc` are parsed with [acdc-parser] and rendered through the same terminal pipeline as Markdown; everything else (including `-` for stdin) is still treated as Markdown.
+
+### Added
+- **AsciiDoc rendering.** Render `.adoc`/`.asciidoc` files with sections, lists, tables, code blocks, admonitions, callouts, images, and inline macros at the same fidelity as Markdown.
+- **AsciiDoc preprocessing.** File-backed documents go through the parser's preprocessor, so `include::` directives and conditional blocks (`ifdef`, `ifndef`, `ifeval`) are resolved.
+- **Syntax highlighting for source blocks.** `[source,lang]` listings pass their language through as an info string, so AsciiDoc code blocks get the same syntect highlighting as Markdown ` ```lang ` fences.
+- **Table footers.** Footer rows render as a distinct section separated from the body by a rule, instead of being flattened into ordinary body rows.
+- **Table column spans.** Colspan is carried through an internal renderer metadata channel so merged cells preserve their width instead of expanding into blank placeholder cells.
+- **Table-of-contents and section anchors.** `toc::[]` blocks render as a linked "Table of Contents" list, and section headings emit stable IDs (from the parser's TOC entries) so intra-document links resolve.
+- **Visible document metadata.** Document attributes such as `description`, `revnumber`, `revdate`, and `revremark` are surfaced in output.
+- **Media blocks.** Audio and video blocks render as structured sections with a label/title and linked source items.
+- **Styled ordered lists.** `loweralpha`, `upperalpha`, `lowerroman`, and `upperroman` ordered lists render with their non-numeric markers preserved.
+- **Inline macros.** `stem` macros render as code with their notation name; passthrough macros render through the code path for better literal fidelity.
+
+### Known limitations
+- Standard-input AsciiDoc cannot resolve relative `include::` directives (no source path to anchor against).
+- Rowspan still renders as continued blank cells rather than a fully merged multirow layout.
+- Table cells are flattened to readable text; nested block structure inside cells is not yet first-class render data.
+- Some advanced AsciiDoc processor semantics are rendered approximately.
+
+[acdc-parser]: https://crates.io/crates/acdc-parser
+
 ## [2.7.1] – 2024-12-14
 
 ### Removed
@@ -848,7 +873,8 @@ Use `cargo release` to create a new release.
 - Support ordered and unordered lists, with nest.
 - Show links, with references grouped by section.
 
-[Unreleased]: https://github.com/swsnr/mdcat/compare/mdcat-2.7.1...HEAD
+[Unreleased]: https://github.com/kriipke/adcat/compare/2.8.0...HEAD
+[2.8.0]: https://github.com/kriipke/adcat/compare/v2.7.1...2.8.0
 [2.7.1]: https://github.com/swsnr/mdcat/compare/mdcat-2.7.0...mdcat-2.7.1
 [2.7.0]: https://github.com/swsnr/mdcat/compare/mdcat-2.6.2...mdcat-2.7.0
 [2.6.2]: https://github.com/swsnr/mdcat/compare/mdcat-2.6.1...mdcat-2.6.2
