@@ -40,7 +40,7 @@ jobs:
         uses: docker://asciidoctor/docker-asciidoctor
         with:
           args: asciidoctor -b manpage -a reproducible adcat.1.adoc
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: adcat.1
           path: adcat.1
@@ -145,21 +145,21 @@ jobs:
           subject-path: ${{ steps.package.outputs.file }}
 
       - name: Upload tarball / zip
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.package.outputs.name }}
           path: ${{ steps.package.outputs.file }}
 
       - name: Upload .deb
         if: matrix.deb_arch != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: deb-${{ matrix.deb_arch }}
           path: "*.deb"
 
       - name: Upload .rpm
         if: matrix.deb_arch != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rpm-${{ matrix.rpm_arch }}
           path: "*.rpm"
